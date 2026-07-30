@@ -21,6 +21,12 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # The Kotlin half cannot be compiled on the dev host (no SDK), so this
+      # cheap syntax/symbol check runs here too and fails before the much slower
+      # Android job starts.
+      - name: Check Android sources for syntax and symbol errors
+        run: python3 scripts/verify-kotlin-braces.py
+
       - name: Test
         run: go test -race ./...
 

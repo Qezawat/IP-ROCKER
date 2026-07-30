@@ -34,7 +34,7 @@ data class ScanSettings(
     val tries: Int = 3,
     val timeoutMs: Int = 6000,
     val holdMs: Int = 3000,
-    val downloadBytes: Long = 256L * 1024,
+    val downloadBytes: Long = 1024L * 1024,
     val uploadBytes: Long = 128L * 1024,
     /** Reject addresses slower than this many KB/s. Zero disables the filter. */
     val minSpeedKBps: Double = 0.0,
@@ -69,11 +69,29 @@ data class ScanSettings(
         /** Parallelism presets, labelled by what they suit. */
         val PRESET_CONCURRENCY = listOf(50, 100, 200, 500)
 
-        /** Download-sample presets in bytes. Off is the download toggle's job. */
-        val PRESET_DOWNLOAD_BYTES = listOf(128L * 1024, 256L * 1024, 512L * 1024, 1024L * 1024)
+        /**
+         * Download-sample presets in bytes. Off is the download toggle's job.
+         *
+         * The top of this range is deliberately large: a 256 KB sample cannot
+         * tell a 1 MB/s middlebox from a 5 MB/s edge, and separating those two
+         * is the entire point of the throughput test. The caption warns about
+         * the data cost instead of the range forbidding it.
+         */
+        val PRESET_DOWNLOAD_BYTES = listOf(
+            128L * 1024, 256L * 1024, 512L * 1024,
+            1024L * 1024, 2048L * 1024, 5120L * 1024,
+            10240L * 1024, 20480L * 1024,
+        )
 
-        /** Minimum-speed presets in KB/s; 0 means no filter. */
-        val PRESET_MIN_SPEED = listOf(0.0, 100.0, 250.0, 500.0, 1000.0)
+        /**
+         * Minimum-speed presets in KB/s; 0 means no filter. Reaches 5 MB/s
+         * because that is what a genuinely usable edge measured on a real
+         * censored mobile link, so the floor has to be expressible.
+         */
+        val PRESET_MIN_SPEED = listOf(0.0, 100.0, 250.0, 500.0, 1000.0, 2000.0, 5000.0)
+
+        /** Upload-sample presets in bytes. */
+        val PRESET_UPLOAD_BYTES = listOf(128L * 1024, 512L * 1024, 1024L * 1024, 2048L * 1024)
     }
 
     /**

@@ -71,12 +71,53 @@ private fun countAdvice(n: Int): String = when {
 }
 
 /** Describes a download-sample size, including the off case. */
-private fun downloadLabel(bytes: Long): String =
-    if (bytes <= 0L) "Off" else "${bytes / 1024} KB"
+private fun downloadLabel(bytes: Long): String = when {
+    bytes <= 0L -> "Off"
+    bytes >= 1024L * 1024 -> {
+        val mb = bytes.toDouble() / (1024 * 1024)
+        if (mb == mb.toLong().toDouble()) "${mb.toLong()} MB" else String.format("%.1f MB", mb)
+    }
+    else -> "${bytes / 1024} KB"
+}
 
 /** Describes a speed floor, including the off case. */
-private fun speedLabel(kbps: Double): String =
-    if (kbps <= 0.0) "Off" else "${kbps.toInt()} KB/s"
+private fun speedLabel(kbps: Double): String = when {
+    kbps <= 0.0 -> "Off"
+    kbps >= 1024 -> {
+        val mb = kbps / 1024
+        if (mb == mb.toLong().toDouble()) "${mb.toLong()} MB/s" else String.format("%.1f MB/s", mb)
+    }
+    else -> "${kbps.toInt()} KB/s"
+}
+
+/**
+ * States the data cost of a sample size, which the number alone does not convey:
+ * the sample is fetched once per answering address, so it is the main driver of
+ * mobile data use on a wide sweep.
+ */
+private fun downloadAdvice(bytes: Long): String = when {
+    bytes <= 0L -> "Off: addresses that answer but cannot carry traffic will pass."
+    bytes < 1024L * 1024 ->
+        "Small and cheap, but too little payload to tell a slow middlebox from a " +
+            "real edge."
+    bytes <= 5120L * 1024 ->
+        "Good balance: enough payload to measure real throughput."
+    else ->
+        "Accurate throughput, but this is the main driver of data use — it is " +
+            "downloaded once per answering address."
+}
+
+/** Explains what a speed floor actually discards. */
+private fun minSpeedAdvice(kbps: Double): String = when {
+    kbps <= 0.0 -> "No throughput floor: every address that answers is kept."
+    kbps >= 1024 ->
+        "Strict. On a censored mobile link a genuinely good edge reaches this, " +
+            "but a slow day will return nothing."
+    else ->
+        "Discards addresses that answer and hold a connection but cannot carry " +
+            "traffic. Set it above the speed you would tolerate, not the speed " +
+            "you hope for."
+}
 
 /**
  * The settings sheet.
@@ -249,6 +290,29 @@ fun SettingsSheet(
                     checked = settings.uploadTest,
                     onCheckedChange = { v -> onChange { it.copy(uploadTest = v) } },
                 )
+                if (settings.uploadTest) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Upload sample: ${downloadLabel(settings.uploadBytes)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    ChoiceChips(
+                        options = ScanSettings.PRESET_UPLOAD_BYTES,
+                        selected = { it == settings.uploadBytes },
+                        label = ::downloadLabel,
+                        onSelect = { b -> onChange { it.copy(uploadBytes = b) } },
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Uploaded once per answering address, on top of the download " +
+                            "sample. A mobile uplink is the slower direction, so keep " +
+                            "this smaller than the download.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                }
                 if (settings.speedTest) {
                     Spacer(Modifier.height(6.dp))
                     Text(
@@ -265,11 +329,9 @@ fun SettingsSheet(
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "A bigger sample measures throughput more accurately but is " +
-                            "downloaded once per address, so it is the main driver of " +
-                            "data use on a wide sweep.",
+                        downloadAdvice(settings.downloadBytes),
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        color = if (settings.downloadBytes > 5120L * 1024) VerdictCaution else TextSecondary,
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
@@ -286,11 +348,9 @@ fun SettingsSheet(
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Discards addresses that answer and hold a connection but " +
-                            "cannot actually carry traffic. Set it above the speed you " +
-                            "would tolerate, not the speed you hope for.",
+                        minSpeedAdvice(settings.minSpeedKBps),
                         style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary,
+                        color = if (settings.minSpeedKBps >= 1024) VerdictCaution else TextSecondary,
                     )
                 }
                 SettingToggle(

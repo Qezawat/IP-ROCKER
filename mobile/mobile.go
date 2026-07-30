@@ -80,7 +80,10 @@ func NewScanRequest() *ScanRequest {
 		tries:         3,
 		timeoutMs:     6000,
 		holdMs:        3000,
-		downloadBytes: 256 * 1024,
+		// A megabyte is the smallest sample that reliably separates a slow
+		// middlebox from a real edge; a 256 KB fetch finishes inside the noise
+		// on either.
+		downloadBytes: 1024 * 1024,
 		uploadBytes:   0,
 	}
 }
