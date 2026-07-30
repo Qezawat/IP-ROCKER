@@ -20,6 +20,7 @@ import (
 	"github.com/Qezawat/IP-ROCKER/internal/probe"
 	"github.com/Qezawat/IP-ROCKER/internal/scanner"
 	"github.com/Qezawat/IP-ROCKER/internal/score"
+	"github.com/Qezawat/IP-ROCKER/internal/tui"
 )
 
 var version = "dev"
@@ -35,7 +36,7 @@ func main() {
 		tries       = flag.Int("tries", 3, "attempts per address")
 		timeout     = flag.Duration("timeout", 6*time.Second, "per-attempt timeout")
 		hold        = flag.Duration("hold", 3*time.Second, "idle hold duration; 0 disables the reset check")
-		download    = flag.Int64("download", 256*1024, "download sample size in bytes; 0 disables")
+		download    = flag.Int64("download", 1024*1024, "download sample size in bytes; 0 disables")
 		upload      = flag.Int64("upload", 0, "upload sample size in bytes; 0 disables")
 		wsPath      = flag.String("ws-path", "", "WebSocket path to verify, e.g. /?ed=2560")
 		requireWS   = flag.Bool("require-ws", false, "reject addresses that refuse a WebSocket upgrade")
@@ -51,11 +52,23 @@ func main() {
 		txtOut      = flag.String("out", "", "write clean ip:port lines to this file")
 		showVersion = flag.Bool("version", false, "print version and exit")
 		quiet       = flag.Bool("quiet", false, "suppress progress output")
+		ui          = flag.Bool("ui", false, "force the interactive terminal interface")
+		noUI        = flag.Bool("no-ui", false, "force the plain flag-driven scan even on a terminal")
 	)
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println("iprocker", version)
+		return
+	}
+
+	// With no flags on a real terminal, the interactive interface is what the
+	// user wants: the flag surface below assumes they already know every knob
+	// and its cost, which is exactly the friction that stops a scan happening.
+	if *ui || (!*noUI && flag.NFlag() == 0 && flag.NArg() == 0 && isTerminal()) {
+		if err := tui.Run(version); err != nil {
+			fail(err)
+		}
 		return
 	}
 
@@ -279,4 +292,15 @@ func orDash(s string) string {
 func fail(err error) {
 	fmt.Fprintf(os.Stderr, "iprocker: %v\n", err)
 	os.Exit(1)
+}
+
+// isTerminal reports whether stdout is an interactive terminal. Piped or
+// redirected output must stay plain text so `iprocker > file` and CI keep
+// working unchanged.
+func isTerminal() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
