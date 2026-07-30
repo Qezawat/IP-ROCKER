@@ -59,6 +59,17 @@ type Candidate struct {
 
 	// Total is the composite 0..100 ranking figure.
 	Total float64 `json:"score"`
+
+	// Component scores, retained so the total can be recomputed once the whole
+	// population is known. Latency is only meaningful relative to the other
+	// addresses in the same scan, which is not available while a single
+	// candidate is being evaluated.
+	repScore       float64
+	stabilityScore float64
+	downloadScore  float64
+	uploadScore    float64
+	weights        Weights
+
 	// Healthy is false when the address failed a hard requirement, in which
 	// case it is reported but never recommended.
 	Healthy bool `json:"healthy"`
@@ -105,7 +116,11 @@ func StrictCriteria() Criteria {
 	c.RequireWebSocket = true
 	c.MinDownloadKBps = 200
 	c.MaxLossPercent = 34
-	c.MaxLatency = 900 * time.Millisecond
+	// Deliberately generous. On a long path a perfectly usable edge sits near
+	// 700-800 ms, so a tight ceiling here would reject every reachable address
+	// and return nothing. Ranking, not this cutoff, is what surfaces the
+	// fastest of them.
+	c.MaxLatency = 2500 * time.Millisecond
 	return c
 }
 
@@ -185,11 +200,46 @@ func Evaluate(r *probe.Result, rep *reputation.Info, c Criteria) *Candidate {
 		cand.Notes = append(cand.Notes, "reputation flagged as high risk")
 	}
 
-	cand.Total = composite(stats, rep, c.Weights)
+	// A provisional total, correct for everything except latency. Latency is
+	// finalised by Rank once the whole population is visible.
+	cand.weights = c.Weights
+	cand.repScore = reputationScore(rep)
+	cand.stabilityScore = stabilityScore(stats)
+	cand.downloadScore = scale(stats.downloadBps/1024, 50, 4096, false)
+	cand.uploadScore = scale(stats.uploadBps/1024, 25, 1024, false)
+	if stats.successes == 0 {
+		cand.Total = 0
+	} else {
+		cand.Total = cand.combine(scale(ms(stats.avg), 30, 1500, true))
+	}
+
+	// An address that answers unusually fast but then cannot move data is the
+	// signature of a middlebox answering on the edge's behalf rather than the
+	// edge itself. Flag it, because a latency-only view rates it best in class.
+	if stats.successes > 0 && stats.downloadTested && stats.downloadBps <= 0 &&
+		stats.avg > 0 && ms(stats.avg) < 250 {
+		cand.Notes = append(cand.Notes,
+			"answered in under 250 ms but carried no data — likely a middlebox, not the edge")
+	}
+
 	if rep != nil {
 		cand.Notes = append(cand.Notes, rep.Reasons...)
 	}
 	return cand
+}
+
+// combine folds a latency sub-score into the retained component scores.
+func (c *Candidate) combine(latScore float64) float64 {
+	w := c.weights
+	if w == (Weights{}) {
+		w = DefaultWeights()
+	}
+	total := c.repScore*w.Reputation +
+		latScore*w.Latency +
+		c.stabilityScore*w.Stability +
+		c.downloadScore*w.Download +
+		c.uploadScore*w.Upload
+	return math.Round(clamp(total, 0, 100)*10) / 10
 }
 
 type stats struct {
@@ -198,6 +248,7 @@ type stats struct {
 	successes        int
 	downloadBps      float64
 	uploadBps        float64
+	downloadTested   bool
 	colo             string
 	tlsOk            bool
 	held             bool
@@ -239,6 +290,9 @@ func summarise(r *probe.Result) stats {
 		if a.DownloadBps > s.downloadBps {
 			s.downloadBps = a.DownloadBps
 		}
+		if a.DownloadTested {
+			s.downloadTested = true
+		}
 		if a.UploadBps > s.uploadBps {
 			s.uploadBps = a.UploadBps
 		}
@@ -271,43 +325,30 @@ func summarise(r *probe.Result) stats {
 	return s
 }
 
-func composite(s stats, rep *reputation.Info, w Weights) float64 {
+// reputationScore converts a risk percentage into a 0..100 sub-score. An
+// unverified address scores mid-range rather than zero, so a provider outage
+// does not erase all ranking information.
+func reputationScore(rep *reputation.Info) float64 {
+	if rep != nil && rep.Err == "" {
+		return clamp(100-rep.RiskPercent, 0, 100)
+	}
+	return 50
+}
+
+// stabilityScore blends loss, jitter and the hold and WebSocket outcomes.
+func stabilityScore(s stats) float64 {
 	if s.successes == 0 {
 		return 0
 	}
-
-	// Reputation: an unverified address scores mid-range rather than zero, so
-	// a provider outage does not erase all ranking information.
-	repScore := 50.0
-	if rep != nil && rep.Err == "" {
-		repScore = 100 - rep.RiskPercent
-	}
-
-	// Latency: 30ms or better is full marks, 1500ms is zero.
-	latScore := scale(ms(s.avg), 30, 1500, true)
-
-	// Stability blends loss, jitter and the hold/WebSocket outcomes.
-	stability := (100 - s.loss) * 0.5
-	stability += scale(ms(s.jitter), 5, 400, true) * 0.3
+	v := (100 - s.loss) * 0.5
+	v += scale(ms(s.jitter), 5, 400, true) * 0.3
 	if s.held {
-		stability += 15
+		v += 15
 	}
 	if s.wsOk {
-		stability += 5
+		v += 5
 	}
-	stability = clamp(stability, 0, 100)
-
-	// Throughput: 4 MB/s down and 1 MB/s up are treated as full marks.
-	dlScore := scale(s.downloadBps/1024, 50, 4096, false)
-	ulScore := scale(s.uploadBps/1024, 25, 1024, false)
-
-	total := repScore*w.Reputation +
-		latScore*w.Latency +
-		stability*w.Stability +
-		dlScore*w.Download +
-		ulScore*w.Upload
-
-	return math.Round(clamp(total, 0, 100)*10) / 10
+	return clamp(v, 0, 100)
 }
 
 // scale maps v within [best, worst] onto 0..100. When lowerIsBetter is true,
@@ -345,8 +386,18 @@ func clamp(v, lo, hi float64) float64 {
 	return math.Max(lo, math.Min(hi, v))
 }
 
-// Rank sorts candidates best-first: healthy before unhealthy, then by score.
+// Rank finalises latency scoring against the whole population, then sorts
+// best-first: healthy before unhealthy, then by score.
+//
+// Latency is scored relatively rather than against fixed absolute bounds. On a
+// long path every reachable edge may sit near 700-800 ms, and an absolute scale
+// would score all of them badly while rewarding an address that answered in
+// 200 ms — which on such a path is usually a middlebox replying on the edge's
+// behalf, not a genuinely closer edge. Relative scoring makes the best
+// reachable address score well and keeps the ordering meaningful on any network.
 func Rank(cands []*Candidate) {
+	rescoreLatency(cands)
+
 	sort.SliceStable(cands, func(i, j int) bool {
 		a, b := cands[i], cands[j]
 		if a.Healthy != b.Healthy {
@@ -357,4 +408,57 @@ func Rank(cands []*Candidate) {
 		}
 		return a.AvgLatency < b.AvgLatency
 	})
+}
+
+// rescoreLatency recomputes each candidate's total using a latency scale
+// derived from the population that actually answered.
+func rescoreLatency(cands []*Candidate) {
+	var measured []float64
+	for _, c := range cands {
+		if c.AvgLatencyMs > 0 {
+			measured = append(measured, c.AvgLatencyMs)
+		}
+	}
+	if len(measured) == 0 {
+		return
+	}
+
+	sorted := make([]float64, len(measured))
+	copy(sorted, measured)
+	sort.Float64s(sorted)
+
+	best := sorted[0]
+	// The 90th percentile is the "worst acceptable" anchor. Using the true
+	// maximum would let one pathological outlier compress everyone else into
+	// the top of the scale.
+	worst := sorted[percentileIndex(len(sorted), 0.90)]
+
+	// Keep a floor of separation so a population with nearly identical
+	// latencies does not amplify millisecond noise into large score gaps.
+	const minSpreadMs = 120
+	if worst-best < minSpreadMs {
+		worst = best + minSpreadMs
+	}
+
+	for _, c := range cands {
+		if c.AvgLatencyMs <= 0 {
+			c.Total = 0
+			continue
+		}
+		c.Total = c.combine(scale(c.AvgLatencyMs, best, worst, true))
+	}
+}
+
+func percentileIndex(n int, p float64) int {
+	if n <= 1 {
+		return 0
+	}
+	idx := int(float64(n-1) * p)
+	if idx < 0 {
+		return 0
+	}
+	if idx >= n {
+		return n - 1
+	}
+	return idx
 }

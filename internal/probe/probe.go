@@ -149,6 +149,9 @@ type Attempt struct {
 
 	DownloadBps float64
 	UploadBps   float64
+	// DownloadTested records that a transfer was attempted, so a zero
+	// DownloadBps can be told apart from "the check was disabled".
+	DownloadTested bool
 
 	Err string
 }
@@ -351,6 +354,7 @@ func probeHTTP(ctx context.Context, ip net.IP, sni string, cfg Config) Attempt {
 	}
 
 	if cfg.DownloadBytes > 0 {
+		att.DownloadTested = true
 		bps, err := measureDownload(ctx, client, scheme, host, cfg)
 		if err != nil {
 			att.Err = "download: " + err.Error()
