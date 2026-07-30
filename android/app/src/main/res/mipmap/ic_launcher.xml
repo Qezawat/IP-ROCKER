@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Legacy launcher icon for API 24-25, which predate adaptive icons. The
+     adaptive version in mipmap-anydpi-v26 takes over on API 26+. A vector is
+     used rather than PNG densities so the icon stays crisp at every size
+     without shipping five bitmaps. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#0A0E14"
+        android:pathData="M14,4h80a10,10 0,0 1,10 10v80a10,10 0,0 1,-10 10h-80a10,10 0,0 1,-10 -10v-80a10,10 0,0 1,10 -10z" />
+
+    <path
+        android:fillColor="#00E5A0"
+        android:pathData="M54,54m-7,0a7,7 0,1 0,14 0a7,7 0,1 0,-14 0z" />
+
+    <path
+        android:strokeColor="#00E5A0"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M39,69a21,21 0,0 1,0 -30" />
+    <path
+        android:strokeColor="#00E5A0"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M69,39a21,21 0,0 1,0 30" />
+
+    <path
+        android:strokeColor="#0C8C64"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M28,80a34,34 0,0 1,0 -52" />
+    <path
+        android:strokeColor="#0C8C64"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M80,28a34,34 0,0 1,0 52" />
+</vector>

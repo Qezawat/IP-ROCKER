@@ -1,0 +1,26 @@
+# Go
+/iprocker
+/dist/
+*.test
+*.out
+
+# Scan output
+ips.txt
+clean.txt
+report.json
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/libs/*.aar
+android/keystore/
+*.keystore
+*.jks
+
+# Editors
+.idea/
+.vscode/
+*.iml
+.DS_Store

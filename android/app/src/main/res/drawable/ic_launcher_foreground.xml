@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A signal-sweep mark: concentric arcs over a locked-on dot, drawn inside the
+     adaptive-icon safe zone so no launcher mask clips it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#00E5A0"
+        android:pathData="M54,50m-7,0a7,7 0,1 0,14 0a7,7 0,1 0,-14 0z" />
+
+    <path
+        android:strokeColor="#00E5A0"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M39,65a21,21 0,0 1,0 -30" />
+    <path
+        android:strokeColor="#00E5A0"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M69,35a21,21 0,0 1,0 30" />
+
+    <path
+        android:strokeColor="#0C8C64"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M30,74a34,34 0,0 1,0 -48" />
+    <path
+        android:strokeColor="#0C8C64"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M78,26a34,34 0,0 1,0 48" />
+</vector>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- A dark splash theme so the app never flashes white on launch; Compose
+         supplies the real colour scheme once the activity is up. -->
+    <style name="Theme.IPRocker" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/rocker_bg</item>
+        <item name="android:navigationBarColor">@color/rocker_bg</item>
+        <item name="android:windowBackground">@color/rocker_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
