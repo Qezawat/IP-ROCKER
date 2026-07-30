@@ -38,6 +38,10 @@ import com.qezawat.iprocker.ui.theme.VerdictCaution
  * order of magnitude and the trade-off is not obvious from the number alone.
  */
 private fun timeoutAdvice(ms: Int): String = when {
+    ms < 400 ->
+        "Extreme. Only edges that answer in a few hundred milliseconds pass. " +
+            "Fastest possible sweep, but on a mobile link most healthy edges " +
+            "will be discarded as failures."
     ms < 1000 ->
         "Very aggressive. Only edges that answer almost instantly survive, so " +
             "the scan is fast but healthy addresses on a slow mobile link will " +
@@ -256,13 +260,14 @@ fun SettingsSheet(
                 Slider(
                     value = settings.timeoutMs.toFloat(),
                     onValueChange = { v -> onChange { it.copy(timeoutMs = v.toInt()) } },
-                    // Steps land on 500 ms increments across the whole range, so
-                    // sub-second timeouts are reachable. A low timeout discards
-                    // slow edges early and speeds the scan up several times over;
-                    // too low on a mobile network turns healthy edges into false
-                    // failures, which is why the guidance below is shown.
-                    valueRange = 500f..15000f,
-                    steps = 28,
+                    // 100 ms increments from 200 ms upward. The low end matters:
+                    // a sub-300 ms timeout keeps only edges that answer almost
+                    // instantly, which is the fastest way to sweep a large range
+                    // when latency is already known to be good. It also produces
+                    // false failures on a slow link, so the advice text below
+                    // changes with the value.
+                    valueRange = 200f..15000f,
+                    steps = 147,
                 )
                 Text(
                     text = timeoutAdvice(settings.timeoutMs),
