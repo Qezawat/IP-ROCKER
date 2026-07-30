@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -37,6 +38,7 @@ import com.qezawat.iprocker.ui.theme.TextSecondary
  * Each toggle states what it costs and what it buys, because the trade-off
  * between scan speed and result quality is the main decision the user makes.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsSheet(
     settings: ScanSettings,
