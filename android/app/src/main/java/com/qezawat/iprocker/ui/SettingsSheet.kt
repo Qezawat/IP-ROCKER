@@ -1,6 +1,5 @@
 package com.qezawat.iprocker.ui
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,8 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -25,11 +22,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.qezawat.iprocker.data.ScanSettings
+import com.qezawat.iprocker.ui.components.ChoiceChips
 import com.qezawat.iprocker.ui.components.RockerCard
 import com.qezawat.iprocker.ui.components.SectionLabel
 import com.qezawat.iprocker.ui.theme.RockerAccent
 import com.qezawat.iprocker.ui.theme.RockerBackground
-import com.qezawat.iprocker.ui.theme.RockerSurfaceHigh
 import com.qezawat.iprocker.ui.theme.TextSecondary
 import com.qezawat.iprocker.ui.theme.VerdictCaution
 
@@ -55,6 +52,31 @@ private fun timeoutAdvice(ms: Int): String = when {
         "Patient. Catches usable but slow edges at the cost of a much longer " +
             "scan."
 }
+
+/** Renders an address count compactly, so 20000 reads as 20k on a chip. */
+private fun countLabel(n: Int): String =
+    if (n >= 1000 && n % 1000 == 0) "${n / 1000}k" else "$n"
+
+/**
+ * Warns about the cost of a large sweep. The app allows it — a wide sweep is
+ * how rare clean blocks get found — but the time and data are worth stating.
+ */
+private fun countAdvice(n: Int): String = when {
+    n <= 500 -> "Quick look. Finishes in a minute or two."
+    n <= 2_500 -> "Normal sweep. A few minutes, modest data use."
+    n <= 5_000 -> "Wide sweep. Expect several minutes and noticeable data use."
+    else ->
+        "Very wide sweep. This can run for a long time and use a lot of mobile " +
+            "data. Keep the download test small, or off, at this size."
+}
+
+/** Describes a download-sample size, including the off case. */
+private fun downloadLabel(bytes: Long): String =
+    if (bytes <= 0L) "Off" else "${bytes / 1024} KB"
+
+/** Describes a speed floor, including the off case. */
+private fun speedLabel(kbps: Double): String =
+    if (kbps <= 0.0) "Off" else "${kbps.toInt()} KB/s"
 
 /**
  * The settings sheet.
@@ -118,22 +140,18 @@ fun SettingsSheet(
             RockerCard {
                 SectionLabel("How many addresses")
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ScanSettings.PRESET_COUNTS.forEach { n ->
-                        AssistChip(
-                            onClick = { onChange { it.copy(count = n) } },
-                            label = { Text("$n") },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = if (settings.count == n) {
-                                    RockerAccent.copy(alpha = 0.18f)
-                                } else {
-                                    RockerSurfaceHigh
-                                },
-                                labelColor = if (settings.count == n) RockerAccent else TextSecondary,
-                            ),
-                        )
-                    }
-                }
+                ChoiceChips(
+                    options = ScanSettings.PRESET_COUNTS,
+                    selected = { it == settings.count },
+                    label = ::countLabel,
+                    onSelect = { n -> onChange { it.copy(count = n) } },
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = countAdvice(settings.count),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (settings.count > 5_000) VerdictCaution else TextSecondary,
+                )
                 Spacer(Modifier.height(10.dp))
                 Text(
                     "Parallel probes: ${settings.concurrency}",
@@ -143,37 +161,56 @@ fun SettingsSheet(
                 Slider(
                     value = settings.concurrency.toFloat(),
                     onValueChange = { v -> onChange { it.copy(concurrency = v.toInt()) } },
-                    valueRange = 8f..160f,
-                    steps = 18,
+                    // Up to 500 in steps of 10. A wide sweep is only tolerable at
+                    // high parallelism, so the ceiling has to be well above the
+                    // socket count a cautious default would pick.
+                    valueRange = 10f..500f,
+                    steps = 48,
                 )
+                Spacer(Modifier.height(4.dp))
+                ChoiceChips(
+                    options = ScanSettings.PRESET_CONCURRENCY,
+                    selected = { it == settings.concurrency },
+                    label = { "$it" },
+                    onSelect = { c -> onChange { it.copy(concurrency = c) } },
+                )
+                Spacer(Modifier.height(4.dp))
                 Text(
                     "Higher finishes sooner but a phone on mobile data can run out " +
                         "of sockets and start reporting false failures.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
+                    color = if (settings.concurrency > 200) VerdictCaution else TextSecondary,
                 )
             }
 
             Spacer(Modifier.height(12.dp))
 
             RockerCard {
-                SectionLabel("Port")
+                SectionLabel("Ports")
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Tap to select one or more. Every extra port multiplies the " +
+                        "number of probes, so two ports over 5000 addresses is " +
+                        "10000 probes.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                )
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ScanSettings.COMMON_PORTS.forEach { p ->
-                        AssistChip(
-                            onClick = { onChange { it.copy(port = p) } },
-                            label = { Text("$p") },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = if (settings.port == p) {
-                                    RockerAccent.copy(alpha = 0.18f)
-                                } else {
-                                    RockerSurfaceHigh
-                                },
-                                labelColor = if (settings.port == p) RockerAccent else TextSecondary,
-                            ),
-                        )
-                    }
+                val selectedPorts = settings.selectedPorts()
+                ChoiceChips(
+                    options = ScanSettings.COMMON_PORTS,
+                    selected = { it in selectedPorts },
+                    label = { "$it" },
+                    onSelect = { p -> onChange { it.togglePort(p) } },
+                )
+                if (selectedPorts.size > 1) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "${selectedPorts.size} ports selected — " +
+                            "${settings.count * selectedPorts.size} probes.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = VerdictCaution,
+                    )
                 }
             }
 
@@ -212,6 +249,50 @@ fun SettingsSheet(
                     checked = settings.uploadTest,
                     onCheckedChange = { v -> onChange { it.copy(uploadTest = v) } },
                 )
+                if (settings.speedTest) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Download sample: ${downloadLabel(settings.downloadBytes)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    ChoiceChips(
+                        options = ScanSettings.PRESET_DOWNLOAD_BYTES,
+                        selected = { it == settings.downloadBytes },
+                        label = ::downloadLabel,
+                        onSelect = { b -> onChange { it.copy(downloadBytes = b) } },
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "A bigger sample measures throughput more accurately but is " +
+                            "downloaded once per address, so it is the main driver of " +
+                            "data use on a wide sweep.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Reject slower than: ${speedLabel(settings.minSpeedKBps)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    ChoiceChips(
+                        options = ScanSettings.PRESET_MIN_SPEED,
+                        selected = { it == settings.minSpeedKBps },
+                        label = ::speedLabel,
+                        onSelect = { s -> onChange { it.copy(minSpeedKBps = s) } },
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Discards addresses that answer and hold a connection but " +
+                            "cannot actually carry traffic. Set it above the speed you " +
+                            "would tolerate, not the speed you hope for.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary,
+                    )
+                }
                 SettingToggle(
                     title = "Strict mode",
                     subtitle = "Only accepts addresses that are clean, stable, fast and " +

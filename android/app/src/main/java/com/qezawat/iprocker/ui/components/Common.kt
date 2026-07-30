@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +22,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -88,6 +92,38 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
         fontWeight = FontWeight.Bold,
         modifier = modifier,
     )
+}
+
+/**
+ * A wrapping row of preset chips. Wraps rather than clipping, because the useful
+ * presets outgrew a single line once large sweeps were allowed.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun <T> ChoiceChips(
+    options: List<T>,
+    selected: (T) -> Boolean,
+    label: (T) -> String,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { option ->
+            val on = selected(option)
+            AssistChip(
+                onClick = { onSelect(option) },
+                label = { Text(label(option)) },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = if (on) RockerAccent.copy(alpha = 0.18f) else RockerSurfaceHigh,
+                    labelColor = if (on) RockerAccent else TextSecondary,
+                ),
+            )
+        }
+    }
 }
 
 /**

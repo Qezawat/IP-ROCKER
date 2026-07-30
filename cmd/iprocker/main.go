@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Qezawat/IP-ROCKER/internal/cfranges"
+	"github.com/Qezawat/IP-ROCKER/internal/netports"
 	"github.com/Qezawat/IP-ROCKER/internal/probe"
 	"github.com/Qezawat/IP-ROCKER/internal/scanner"
 	"github.com/Qezawat/IP-ROCKER/internal/score"
@@ -28,6 +29,8 @@ func main() {
 		count       = flag.Int("count", 400, "how many addresses to probe in the first pass")
 		concurrency = flag.Int("concurrency", 64, "parallel probes")
 		port        = flag.Int("port", 443, "edge port to probe")
+		portsList   = flag.String("ports", "", "comma-separated ports to probe on every address, e.g. 443,2053,8443; 'all' uses every Cloudflare TLS port")
+		minSpeed    = flag.Float64("min-speed", 0, "reject addresses slower than this many KB/s; 0 disables")
 		modeName    = flag.String("mode", "http", "probe depth: tcp, tls or http")
 		tries       = flag.Int("tries", 3, "attempts per address")
 		timeout     = flag.Duration("timeout", 6*time.Second, "per-attempt timeout")
@@ -68,6 +71,14 @@ func main() {
 	if *requireWS {
 		crit.RequireWebSocket = true
 	}
+	if *minSpeed > 0 {
+		crit.MinDownloadKBps = *minSpeed
+	}
+
+	ports, err := netports.Parse(*portsList, *port)
+	if err != nil {
+		fail(err)
+	}
 
 	var extraCIDRs []string
 	for _, c := range strings.Split(*extra, ",") {
@@ -79,8 +90,9 @@ func main() {
 	opts := scanner.Options{
 		Count:       *count,
 		Concurrency: *concurrency,
+		Ports:       ports,
 		Probe: probe.Config{
-			Port:             *port,
+			Port:             ports[0],
 			Mode:             mode,
 			Tries:            *tries,
 			Timeout:          *timeout,
@@ -179,9 +191,11 @@ func printReport(r *scanner.Report, top int) {
 		return
 	}
 
-	fmt.Printf("%-16s %-6s %-8s %-8s %-9s %-6s %-8s %s\n",
-		"IP", "SCORE", "LATENCY", "JITTER", "DOWNLOAD", "COLO", "RISK", "STATUS")
-	fmt.Println(strings.Repeat("-", 88))
+	// The port column matters once several ports are probed: the same address
+	// can appear more than once with different results per port.
+	fmt.Printf("%-16s %-6s %-6s %-8s %-8s %-9s %-6s %-8s %s\n",
+		"IP", "PORT", "SCORE", "LATENCY", "JITTER", "DOWNLOAD", "COLO", "RISK", "STATUS")
+	fmt.Println(strings.Repeat("-", 95))
 
 	for i, c := range clean {
 		if i >= top {
@@ -204,8 +218,9 @@ func printReport(r *scanner.Report, top int) {
 		if c.WSOk {
 			flags += " ws"
 		}
-		fmt.Printf("%-16s %-6.1f %-8s %-8s %-9s %-6s %-8s %s\n",
+		fmt.Printf("%-16s %-6d %-6.1f %-8s %-8s %-9s %-6s %-8s %s\n",
 			c.IP,
+			c.Port,
 			c.Total,
 			fmt.Sprintf("%.0fms", c.AvgLatencyMs),
 			fmt.Sprintf("%.0fms", c.JitterMs),

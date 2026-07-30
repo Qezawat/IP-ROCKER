@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Qezawat/IP-ROCKER/internal/cfranges"
+	"github.com/Qezawat/IP-ROCKER/internal/netports"
 	"github.com/Qezawat/IP-ROCKER/internal/probe"
 	"github.com/Qezawat/IP-ROCKER/internal/reputation"
 	"github.com/Qezawat/IP-ROCKER/internal/score"
@@ -52,6 +53,11 @@ type Options struct {
 	// Criteria decides what counts as usable.
 	Criteria score.Criteria
 
+	// Ports is the set of edge ports to probe on every address. Empty falls
+	// back to Probe.Port alone. Selecting several ports multiplies the work,
+	// so the count is interpreted as addresses, not as probes.
+	Ports []int
+
 	// Ranges controls candidate generation.
 	Ranges cfranges.Options
 
@@ -81,6 +87,12 @@ func (o Options) WithDefaults() Options {
 	if o.Concurrency <= 0 {
 		o.Concurrency = 64
 	}
+	o.Probe = o.Probe.WithDefaults()
+	if len(o.Ports) == 0 {
+		o.Ports = []int{o.Probe.Port}
+	} else {
+		o.Ports = netports.Normalise(o.Ports)
+	}
 	if o.NeighborRadius <= 0 {
 		o.NeighborRadius = 24
 	}
@@ -93,7 +105,6 @@ func (o Options) WithDefaults() Options {
 	if !o.Ranges.IPv4 && !o.Ranges.IPv6 {
 		o.Ranges.IPv4 = true
 	}
-	o.Probe = o.Probe.WithDefaults()
 	if o.Criteria.Weights == (score.Weights{}) {
 		o.Criteria = score.DefaultCriteria()
 	}
@@ -171,7 +182,12 @@ func (s *Scanner) Run(ctx context.Context) (*Report, error) {
 	}
 
 	// Pass 1: weighted random sweep.
-	s.report(Progress{Phase: PhaseProbing, Total: int64(s.opts.Count)})
+	// Total counts probes, not addresses, so selecting several ports is
+	// reflected honestly in the progress bar rather than overshooting 100%.
+	s.report(Progress{
+		Phase: PhaseProbing,
+		Total: int64(s.opts.Count) * int64(len(s.opts.Ports)),
+	})
 	done := ctx.Done()
 	stream := src.Stream(done, s.opts.Count)
 	hitIPs := s.probeStream(ctx, stream, collect)
@@ -203,7 +219,7 @@ func (s *Scanner) Run(ctx context.Context) (*Report, error) {
 			s.report(Progress{
 				Phase:  PhaseNeighbors,
 				Tested: s.tested.Load(),
-				Total:  s.tested.Load() + int64(len(neighbors)),
+				Total:  s.tested.Load() + int64(len(neighbors))*int64(len(s.opts.Ports)),
 				Hits:   s.hits.Load(),
 			})
 			ch := make(chan net.IP, len(neighbors))
@@ -223,10 +239,19 @@ func (s *Scanner) Run(ctx context.Context) (*Report, error) {
 	mu.Unlock()
 
 	var toRate []net.IP
+	// An address that answered on several ports appears once per port, but its
+	// reputation is a property of the address, so it is only looked up once.
+	rated := make(map[string]struct{}, len(snapshot))
 	for _, r := range snapshot {
-		if anyOk(r) {
-			toRate = append(toRate, r.IP)
+		if !anyOk(r) {
+			continue
 		}
+		key := r.IP.String()
+		if _, dup := rated[key]; dup {
+			continue
+		}
+		rated[key] = struct{}{}
+		toRate = append(toRate, r.IP)
 	}
 
 	repMap := map[string]*reputation.Info{}
@@ -270,42 +295,59 @@ func (s *Scanner) probeStream(ctx context.Context, src <-chan net.IP, collect fu
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var hits []net.IP
+	seenHit := make(map[string]struct{})
 
 	for ip := range src {
 		if ctx.Err() != nil {
 			break
 		}
-		sem <- struct{}{}
-		wg.Add(1)
-		s.inFlight.Add(1)
-
-		go func(ip net.IP) {
-			defer func() {
-				<-sem
-				s.inFlight.Add(-1)
-				wg.Done()
-			}()
-
-			r := probe.Probe(ctx, ip, s.opts.Probe)
-			s.tested.Add(1)
-			collect(r)
-
-			if anyOk(r) {
-				s.hits.Add(1)
-				mu.Lock()
-				hits = append(hits, ip)
-				mu.Unlock()
-				if s.opts.OnHit != nil {
-					s.opts.OnHit(score.Evaluate(r, nil, s.opts.Criteria))
-				}
+		// Every selected port is a separate probe of the same address. They are
+		// dispatched independently so one slow port does not stall the others.
+		for _, port := range s.opts.Ports {
+			if ctx.Err() != nil {
+				break
 			}
-			s.report(Progress{
-				Phase:    PhaseProbing,
-				Tested:   s.tested.Load(),
-				Hits:     s.hits.Load(),
-				InFlight: s.inFlight.Load(),
-			})
-		}(ip)
+			sem <- struct{}{}
+			wg.Add(1)
+			s.inFlight.Add(1)
+
+			go func(ip net.IP, port int) {
+				defer func() {
+					<-sem
+					s.inFlight.Add(-1)
+					wg.Done()
+				}()
+
+				cfg := s.opts.Probe
+				cfg.Port = port
+
+				r := probe.Probe(ctx, ip, cfg)
+				s.tested.Add(1)
+				collect(r)
+
+				if anyOk(r) {
+					s.hits.Add(1)
+					// Neighbour expansion works on addresses, so an address that
+					// answered on several ports is only queued once.
+					key := ip.String()
+					mu.Lock()
+					if _, dup := seenHit[key]; !dup {
+						seenHit[key] = struct{}{}
+						hits = append(hits, ip)
+					}
+					mu.Unlock()
+					if s.opts.OnHit != nil {
+						s.opts.OnHit(score.Evaluate(r, nil, s.opts.Criteria))
+					}
+				}
+				s.report(Progress{
+					Phase:    PhaseProbing,
+					Hits:     s.hits.Load(),
+					Tested:   s.tested.Load(),
+					InFlight: s.inFlight.Load(),
+				})
+			}(ip, port)
+		}
 	}
 
 	wg.Wait()

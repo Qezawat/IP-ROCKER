@@ -53,7 +53,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.qezawat.iprocker.data.Candidate
 import com.qezawat.iprocker.ui.components.IpDetailsSheet
 import com.qezawat.iprocker.ui.components.ResultCard
 import com.qezawat.iprocker.ui.components.RockerCard

@@ -41,11 +41,11 @@ type Candidate struct {
 	IP   string `json:"ip"`
 	Port int    `json:"port"`
 
-	AvgLatency  time.Duration `json:"-"`
-	AvgLatencyMs float64      `json:"avg_latency_ms"`
-	MinLatencyMs float64      `json:"min_latency_ms"`
-	JitterMs     float64      `json:"jitter_ms"`
-	LossPercent  float64      `json:"loss_percent"`
+	AvgLatency   time.Duration `json:"-"`
+	AvgLatencyMs float64       `json:"avg_latency_ms"`
+	MinLatencyMs float64       `json:"min_latency_ms"`
+	JitterMs     float64       `json:"jitter_ms"`
+	LossPercent  float64       `json:"loss_percent"`
 
 	DownloadKBps float64 `json:"download_kbps"`
 	UploadKBps   float64 `json:"upload_kbps"`

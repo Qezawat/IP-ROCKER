@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/Qezawat/IP-ROCKER/internal/cfranges"
+	"github.com/Qezawat/IP-ROCKER/internal/netports"
 	"github.com/Qezawat/IP-ROCKER/internal/probe"
 	"github.com/Qezawat/IP-ROCKER/internal/reputation"
 	"github.com/Qezawat/IP-ROCKER/internal/scanner"
@@ -57,6 +58,8 @@ type ScanRequest struct {
 	sni            string
 	host           string
 	wsPath         string
+	ports          string
+	minSpeedKBps   float64
 	requireWS      bool
 	strict         bool
 	skipReputation bool
@@ -84,18 +87,28 @@ func NewScanRequest() *ScanRequest {
 
 // Setters. gomobile exposes each of these as a Java method.
 
-func (r *ScanRequest) SetCount(v int32)           { r.count = v }
-func (r *ScanRequest) SetConcurrency(v int32)     { r.concurrency = v }
-func (r *ScanRequest) SetPort(v int32)            { r.port = v }
-func (r *ScanRequest) SetMode(v string)           { r.mode = v }
-func (r *ScanRequest) SetTries(v int32)           { r.tries = v }
-func (r *ScanRequest) SetTimeoutMs(v int32)       { r.timeoutMs = v }
-func (r *ScanRequest) SetHoldMs(v int32)          { r.holdMs = v }
-func (r *ScanRequest) SetDownloadBytes(v int64)   { r.downloadBytes = v }
-func (r *ScanRequest) SetUploadBytes(v int64)     { r.uploadBytes = v }
-func (r *ScanRequest) SetSNI(v string)            { r.sni = v }
-func (r *ScanRequest) SetHost(v string)           { r.host = v }
-func (r *ScanRequest) SetWebSocketPath(v string)  { r.wsPath = v }
+func (r *ScanRequest) SetCount(v int32)          { r.count = v }
+func (r *ScanRequest) SetConcurrency(v int32)    { r.concurrency = v }
+func (r *ScanRequest) SetPort(v int32)           { r.port = v }
+func (r *ScanRequest) SetMode(v string)          { r.mode = v }
+func (r *ScanRequest) SetTries(v int32)          { r.tries = v }
+func (r *ScanRequest) SetTimeoutMs(v int32)      { r.timeoutMs = v }
+func (r *ScanRequest) SetHoldMs(v int32)         { r.holdMs = v }
+func (r *ScanRequest) SetDownloadBytes(v int64)  { r.downloadBytes = v }
+func (r *ScanRequest) SetUploadBytes(v int64)    { r.uploadBytes = v }
+func (r *ScanRequest) SetSNI(v string)           { r.sni = v }
+func (r *ScanRequest) SetHost(v string)          { r.host = v }
+func (r *ScanRequest) SetWebSocketPath(v string) { r.wsPath = v }
+
+// SetPorts takes a comma-separated port list, for example "443,2053,8443".
+// Empty means probe only the single port set by SetPort. Selecting several
+// ports multiplies the number of probes.
+func (r *ScanRequest) SetPorts(v string) { r.ports = v }
+
+// SetMinSpeedKBps rejects addresses whose download sample is slower than this.
+// Zero disables the filter.
+func (r *ScanRequest) SetMinSpeedKBps(v float64) { r.minSpeedKBps = v }
+
 func (r *ScanRequest) SetRequireWebSocket(v bool) { r.requireWS = v }
 func (r *ScanRequest) SetStrict(v bool)           { r.strict = v }
 func (r *ScanRequest) SetSkipReputation(v bool)   { r.skipReputation = v }
@@ -127,6 +140,9 @@ func (r *ScanRequest) ApplyConfigURL(raw string) (string, error) {
 	}
 	if cfg.Port > 0 {
 		r.port = int32(cfg.Port)
+		// A config link names one port, so probing a wider set would test
+		// endpoints the config cannot use.
+		r.ports = ""
 	}
 
 	var parts []string
@@ -240,6 +256,14 @@ func (r *ScanRequest) toOptions(listener ProgressListener) (scanner.Options, err
 	if r.requireWS {
 		crit.RequireWebSocket = true
 	}
+	if r.minSpeedKBps > 0 {
+		crit.MinDownloadKBps = r.minSpeedKBps
+	}
+
+	ports, err := netports.Parse(r.ports, int(r.port))
+	if err != nil {
+		return scanner.Options{}, err
+	}
 
 	var extra []string
 	for _, c := range strings.Split(r.extraCIDRs, ",") {
@@ -251,8 +275,9 @@ func (r *ScanRequest) toOptions(listener ProgressListener) (scanner.Options, err
 	opts := scanner.Options{
 		Count:       int(r.count),
 		Concurrency: int(r.concurrency),
+		Ports:       ports,
 		Probe: probe.Config{
-			Port:             int(r.port),
+			Port:             ports[0],
 			Mode:             mode,
 			Tries:            int(r.tries),
 			Timeout:          time.Duration(r.timeoutMs) * time.Millisecond,
@@ -357,3 +382,7 @@ func BlockProfileJSON() string {
 	b, _ := json.Marshal(out)
 	return string(b)
 }
+
+// CloudflareTLSPortsCSV lets the app populate its port chips without hardcoding
+// the list on the Kotlin side.
+func CloudflareTLSPortsCSV() string { return netports.CloudflareTLSCSV() }

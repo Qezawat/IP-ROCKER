@@ -61,12 +61,16 @@ class ScannerBridge {
         req.setCount(settings.count)
         req.setConcurrency(settings.concurrency)
         req.setPort(settings.port)
+        // Empty means the single port above; a list multiplies the probe count.
+        req.setPorts(settings.ports)
         req.setMode(settings.mode)
         req.setTries(settings.tries)
         req.setTimeoutMs(settings.timeoutMs)
         req.setHoldMs(if (settings.stabilityCheck) settings.holdMs else 0)
         req.setDownloadBytes(if (settings.speedTest) settings.downloadBytes else 0L)
         req.setUploadBytes(if (settings.uploadTest) settings.uploadBytes else 0L)
+        // A speed floor is only meaningful when a download sample is taken.
+        req.setMinSpeedKBps(if (settings.speedTest) settings.minSpeedKBps else 0.0)
         req.setStrict(settings.strict)
         req.setSkipReputation(!settings.reputationCheck)
         req.setIPv6(settings.ipv6)

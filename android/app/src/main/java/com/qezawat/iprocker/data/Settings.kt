@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -21,15 +22,22 @@ import kotlinx.coroutines.flow.map
  * are the two things that separate a usable address from one that merely pings.
  */
 data class ScanSettings(
-    val count: Int = 400,
-    val concurrency: Int = 48,
+    val count: Int = 500,
+    val concurrency: Int = 100,
     val port: Int = 443,
+    /**
+     * Comma-separated extra ports probed alongside [port]. Empty means probe
+     * only [port]. Every added port multiplies the number of probes.
+     */
+    val ports: String = "",
     val mode: String = "http",
     val tries: Int = 3,
     val timeoutMs: Int = 6000,
     val holdMs: Int = 3000,
     val downloadBytes: Long = 256L * 1024,
     val uploadBytes: Long = 128L * 1024,
+    /** Reject addresses slower than this many KB/s. Zero disables the filter. */
+    val minSpeedKBps: Double = 0.0,
 
     val stabilityCheck: Boolean = true,
     val speedTest: Boolean = true,
@@ -47,10 +55,59 @@ data class ScanSettings(
     val customRanges: String = "",
     val onlyCustomRanges: Boolean = false,
 ) {
-    /** Ports that Cloudflare serves TLS on, offered as quick choices. */
     companion object {
+        /** Ports Cloudflare terminates TLS on for a proxied hostname. */
         val COMMON_PORTS = listOf(443, 2053, 2083, 2087, 2096, 8443)
-        val PRESET_COUNTS = listOf(150, 400, 1000, 2500)
+
+        /**
+         * Address-count presets. The upper values exist because a sweep of a
+         * space this large is how rare clean blocks get found at all; the app
+         * warns rather than forbids, since the cost is time and data.
+         */
+        val PRESET_COUNTS = listOf(500, 2_500, 5_000, 10_000, 20_000)
+
+        /** Parallelism presets, labelled by what they suit. */
+        val PRESET_CONCURRENCY = listOf(50, 100, 200, 500)
+
+        /** Download-sample presets in bytes. Off is the download toggle's job. */
+        val PRESET_DOWNLOAD_BYTES = listOf(128L * 1024, 256L * 1024, 512L * 1024, 1024L * 1024)
+
+        /** Minimum-speed presets in KB/s; 0 means no filter. */
+        val PRESET_MIN_SPEED = listOf(0.0, 100.0, 250.0, 500.0, 1000.0)
+    }
+
+    /**
+     * The ports this scan will probe. [ports] is the source of truth when set;
+     * an empty list means the single [port], which keeps older saved settings
+     * and config-link scans working unchanged.
+     */
+    fun selectedPorts(): List<Int> {
+        val parsed = ports.split(',')
+            .mapNotNull { it.trim().toIntOrNull() }
+            .filter { it in 1..65535 }
+            .distinct()
+        return if (parsed.isEmpty()) listOf(port) else parsed
+    }
+
+    /**
+     * Adds or removes a port. Deselecting the last remaining port is ignored,
+     * since a scan with no port cannot run; [port] tracks the first selection so
+     * the single-port path stays consistent.
+     */
+    fun togglePort(p: Int): ScanSettings {
+        val current = selectedPorts().toMutableList()
+        if (p in current) {
+            if (current.size == 1) return this
+            current.remove(p)
+        } else {
+            current.add(p)
+        }
+        val ordered = COMMON_PORTS.filter { it in current } +
+            current.filterNot { it in COMMON_PORTS }
+        return copy(
+            port = ordered.first(),
+            ports = if (ordered.size == 1) "" else ordered.joinToString(","),
+        )
     }
 }
 
@@ -69,12 +126,14 @@ class SettingsRepository(private val context: Context) {
             count = p[Keys.COUNT] ?: d.count,
             concurrency = p[Keys.CONCURRENCY] ?: d.concurrency,
             port = p[Keys.PORT] ?: d.port,
+            ports = p[Keys.PORTS] ?: d.ports,
             mode = p[Keys.MODE] ?: d.mode,
             tries = p[Keys.TRIES] ?: d.tries,
             timeoutMs = p[Keys.TIMEOUT] ?: d.timeoutMs,
             holdMs = p[Keys.HOLD] ?: d.holdMs,
             downloadBytes = p[Keys.DOWNLOAD] ?: d.downloadBytes,
             uploadBytes = p[Keys.UPLOAD] ?: d.uploadBytes,
+            minSpeedKBps = p[Keys.MIN_SPEED] ?: d.minSpeedKBps,
             stabilityCheck = p[Keys.STABILITY] ?: d.stabilityCheck,
             speedTest = p[Keys.SPEED] ?: d.speedTest,
             uploadTest = p[Keys.UPLOAD_TEST] ?: d.uploadTest,
@@ -96,12 +155,14 @@ class SettingsRepository(private val context: Context) {
             p[Keys.COUNT] = s.count
             p[Keys.CONCURRENCY] = s.concurrency
             p[Keys.PORT] = s.port
+            p[Keys.PORTS] = s.ports
             p[Keys.MODE] = s.mode
             p[Keys.TRIES] = s.tries
             p[Keys.TIMEOUT] = s.timeoutMs
             p[Keys.HOLD] = s.holdMs
             p[Keys.DOWNLOAD] = s.downloadBytes
             p[Keys.UPLOAD] = s.uploadBytes
+            p[Keys.MIN_SPEED] = s.minSpeedKBps
             p[Keys.STABILITY] = s.stabilityCheck
             p[Keys.SPEED] = s.speedTest
             p[Keys.UPLOAD_TEST] = s.uploadTest
@@ -122,12 +183,14 @@ class SettingsRepository(private val context: Context) {
         val COUNT = intPreferencesKey("count")
         val CONCURRENCY = intPreferencesKey("concurrency")
         val PORT = intPreferencesKey("port")
+        val PORTS = stringPreferencesKey("ports")
         val MODE = stringPreferencesKey("mode")
         val TRIES = intPreferencesKey("tries")
         val TIMEOUT = intPreferencesKey("timeout_ms")
         val HOLD = intPreferencesKey("hold_ms")
         val DOWNLOAD = longPreferencesKey("download_bytes")
         val UPLOAD = longPreferencesKey("upload_bytes")
+        val MIN_SPEED = doublePreferencesKey("min_speed_kbps")
         val STABILITY = booleanPreferencesKey("stability")
         val SPEED = booleanPreferencesKey("speed")
         val UPLOAD_TEST = booleanPreferencesKey("upload_test")
