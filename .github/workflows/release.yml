@@ -29,10 +29,14 @@ jobs:
         id: v
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+            RAW="${{ github.event.inputs.version }}"
           else
-            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+            RAW="${GITHUB_REF#refs/tags/}"
           fi
+          # Strip a leading v, and a stray dot after it, so a v.1.5.0 style tag
+          # does not end up in binary names as ".1.5.0".
+          TAG="${RAW#v}"
+          echo "version=${TAG#.}" >> "$GITHUB_OUTPUT"
 
       - name: Cross-compile
         env:
@@ -86,16 +90,32 @@ jobs:
         id: v
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
-            TAG="${{ github.event.inputs.version }}"
+            RAW="${{ github.event.inputs.version }}"
           else
-            TAG="${GITHUB_REF#refs/tags/v}"
+            RAW="${GITHUB_REF#refs/tags/}"
           fi
+
+          # Tolerate the shapes a human actually types: v1.5.0, 1.5.0, v.1.5.0,
+          # 1.5, and a -rc1 style suffix. Anything left after this that is not
+          # MAJOR.MINOR[.PATCH] is a mistake worth failing loudly on, because a
+          # bad versionCode cannot be taken back once users have installed it.
+          TAG="${RAW#v}"
+          TAG="${TAG#.}"
+          CORE="${TAG%%-*}"
+          if ! printf '%s' "$CORE" | grep -Eq '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+            echo "::error::Tag '$RAW' is not a version. Use vMAJOR.MINOR.PATCH, for example v1.5.0." >&2
+            exit 1
+          fi
+
           # versionCode must increase monotonically, so derive it from semver.
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$TAG"
-          MAJOR=${MAJOR:-1}; MINOR=${MINOR:-0}; PATCH=${PATCH:-0}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CORE"
+          PATCH=${PATCH:-0}
+          CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+
+          echo "Version $TAG, versionCode $CODE"
           echo "version=$TAG" >> "$GITHUB_OUTPUT"
           echo "ANDROID_VERSION_NAME=$TAG" >> "$GITHUB_ENV"
-          echo "ANDROID_VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))" >> "$GITHUB_ENV"
+          echo "ANDROID_VERSION_CODE=$CODE" >> "$GITHUB_ENV"
 
       - name: Decode release keystore
         id: keystore
