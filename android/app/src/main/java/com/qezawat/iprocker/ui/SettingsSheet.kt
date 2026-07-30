@@ -31,6 +31,26 @@ import com.qezawat.iprocker.ui.theme.RockerAccent
 import com.qezawat.iprocker.ui.theme.RockerBackground
 import com.qezawat.iprocker.ui.theme.RockerSurfaceHigh
 import com.qezawat.iprocker.ui.theme.TextSecondary
+import com.qezawat.iprocker.ui.theme.VerdictCaution
+
+/**
+ * Explains what a given timeout will do, because the useful range spans an
+ * order of magnitude and the trade-off is not obvious from the number alone.
+ */
+private fun timeoutAdvice(ms: Int): String = when {
+    ms < 1000 ->
+        "Very aggressive. Only edges that answer almost instantly survive, so " +
+            "the scan is fast but healthy addresses on a slow mobile link will " +
+            "be discarded as failures."
+    ms < 2500 ->
+        "Fast. Good for a quick sweep of many addresses when your connection " +
+            "is stable."
+    ms <= 8000 ->
+        "Balanced. Suits most mobile networks."
+    else ->
+        "Patient. Catches usable but slow edges at the cost of a much longer " +
+            "scan."
+}
 
 /**
  * The settings sheet.
@@ -221,6 +241,14 @@ fun SettingsSheet(
                     steps = 3,
                 )
                 Text(
+                    "How many times each address is probed. More attempts measure " +
+                        "loss and jitter accurately but make the scan proportionally " +
+                        "slower. Three or four is a good balance.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
                     "Timeout: ${settings.timeoutMs} ms",
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
@@ -228,8 +256,18 @@ fun SettingsSheet(
                 Slider(
                     value = settings.timeoutMs.toFloat(),
                     onValueChange = { v -> onChange { it.copy(timeoutMs = v.toInt()) } },
-                    valueRange = 2000f..15000f,
-                    steps = 12,
+                    // Steps land on 500 ms increments across the whole range, so
+                    // sub-second timeouts are reachable. A low timeout discards
+                    // slow edges early and speeds the scan up several times over;
+                    // too low on a mobile network turns healthy edges into false
+                    // failures, which is why the guidance below is shown.
+                    valueRange = 500f..15000f,
+                    steps = 28,
+                )
+                Text(
+                    text = timeoutAdvice(settings.timeoutMs),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (settings.timeoutMs < 1000) VerdictCaution else TextSecondary,
                 )
             }
 
