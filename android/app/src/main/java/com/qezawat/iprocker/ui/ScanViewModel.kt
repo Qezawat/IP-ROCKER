@@ -48,7 +48,17 @@ data class UiState(
 ) {
     val visibleResults: List<Candidate>
         get() {
-            val r = report ?: return liveHits.sortedByDescending { it.score }
+            val r = report
+            // When the report has no candidates (e.g. reputation phase timed
+            // out), fall back to live hits so the user never sees an empty list
+            // after a scan that clearly found addresses.
+            if (r == null || r.candidates.isEmpty()) {
+                return when (filter) {
+                    ResultFilter.USABLE -> liveHits.filter { it.healthy }
+                    ResultFilter.FLAGGED -> liveHits.filter { !it.healthy }
+                    ResultFilter.ALL -> liveHits
+                }.sortedByDescending { it.score }
+            }
             return when (filter) {
                 ResultFilter.USABLE -> r.candidates.filter { it.healthy }
                 ResultFilter.FLAGGED -> r.candidates.filter { !it.healthy }
@@ -241,14 +251,22 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
      * taking the highest-scoring candidates first.
      */
     fun exportText(mode: String = _state.value.settings.exportMode): String {
-        val report = _state.value.report ?: run {
-            val live = _state.value.liveHits.filter { if (mode == "working") it.healthy else true }
-            if (live.isEmpty()) return ""
-            return live.sortedByDescending { it.score }.joinToString("\n") { it.endpoint }
+        val report = _state.value.report
+        val live = _state.value.liveHits
+
+        // Prefer the authoritative report, but fall back to live hits when the
+        // report is absent OR its candidate list is empty (e.g. reputation
+        // phase timed out after probing found hundreds of addresses).
+        val source: List<Candidate> = when {
+            report != null && report.candidates.isNotEmpty() ->
+                if (mode == "working") report.clean else report.candidates
+            live.isNotEmpty() ->
+                live.filter { if (mode == "working") it.healthy else true }
+                    .sortedByDescending { it.score }
+            else -> return ""
         }
-        val list = if (mode == "working") report.clean else report.candidates
-        if (list.isEmpty()) return ""
-        return list.joinToString("\n") { it.endpoint }
+        if (source.isEmpty()) return ""
+        return source.joinToString("\n") { it.endpoint }
     }
 
     /** Phase 2 output: only the working addresses, saved as working_ips.txt. */

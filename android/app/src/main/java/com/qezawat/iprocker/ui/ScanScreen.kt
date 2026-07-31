@@ -3,10 +3,12 @@ package com.qezawat.iprocker.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
@@ -182,6 +184,11 @@ fun ScanScreen(viewModel: ScanViewModel = viewModel()) {
                         if (viewModel.exportWorkingText().isEmpty()) return@ControlCard
                         exportLauncher.launch("working_ips.txt")
                     },
+                    onShare = {
+                        val text = viewModel.exportText("phase1")
+                        if (text.isEmpty()) return@ControlCard
+                        shareText(context, text)
+                    },
                 )
             }
 
@@ -244,6 +251,7 @@ private fun ControlCard(
     onCopyPhase1: () -> Unit,
     onCopyWorking: () -> Unit,
     onSaveWorking: () -> Unit,
+    onShare: () -> Unit,
 ) {
     RockerCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -264,7 +272,10 @@ private fun ControlCard(
 
             // Phase 1 copies every address that answered; Phase 2 copies only the
             // working ones and also offers to save them as working_ips.txt.
-            if (state.report != null && state.report.candidates.isNotEmpty()) {
+            // Show copy button whenever there are results — from the final report
+            // or from live hits that streamed in during probing.  A scan that
+            // timed out during reputation checking still has usable Phase 1 data.
+            if (state.report?.candidates?.isNotEmpty() == true || state.liveHits.isNotEmpty()) {
                 IconButton(
                     onClick = onCopyPhase1,
                     modifier = Modifier.semantics { contentDescription = "Copy all answered endpoints" },
@@ -272,7 +283,8 @@ private fun ControlCard(
                     Icon(Icons.Default.ContentCopy, contentDescription = null, tint = TextSecondary)
                 }
             }
-            if (state.report?.cleanCount?.let { it > 0 } == true) {
+            if (state.report?.cleanCount?.let { it > 0 } == true ||
+                (state.report != null && state.liveHits.any { it.healthy })) {
                 IconButton(
                     onClick = onCopyWorking,
                     modifier = Modifier.semantics { contentDescription = "Copy working endpoints" },
@@ -284,6 +296,16 @@ private fun ControlCard(
                     modifier = Modifier.semantics { contentDescription = "Save working_ips.txt" },
                 ) {
                     Icon(Icons.Default.Save, contentDescription = null, tint = RockerAccent)
+                }
+            }
+            // Share button — always visible when there are results, so the user
+            // can send the list straight to Telegram, WhatsApp, etc.
+            if (state.report?.candidates?.isNotEmpty() == true || state.liveHits.isNotEmpty()) {
+                IconButton(
+                    onClick = onShare,
+                    modifier = Modifier.semantics { contentDescription = "Share results" },
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, tint = TextSecondary)
                 }
             }
         }
@@ -395,6 +417,15 @@ private fun EmptyState(neverRun: Boolean) {
 private fun copyToClipboard(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("IP ROCKER", text))
+}
+
+private fun shareText(context: Context, text: String) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+        putExtra(Intent.EXTRA_SUBJECT, "IP ROCKER results")
+    }
+    context.startActivity(Intent.createChooser(intent, "Share IP list"))
 }
 
 /**
