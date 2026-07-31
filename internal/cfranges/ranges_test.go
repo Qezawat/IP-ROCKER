@@ -126,6 +126,6 @@ func TestOnlyExtraLimitsScope(t *testing.T) {
 
 func TestNoRangesSelectedIsAnError(t *testing.T) {
 	if _, err := NewSource(Options{}); err == nil {
-		t.Error("expected an error when neither IPv4 nor IPv6 is enabled")
+		t.Error("expected an error when no ranges are selected")
 	}
 }

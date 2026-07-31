@@ -73,7 +73,6 @@ class ScannerBridge {
         req.setMinSpeedKBps(if (settings.speedTest) settings.minSpeedKBps else 0.0)
         req.setStrict(settings.strict)
         req.setSkipReputation(!settings.reputationCheck)
-        req.setIPv6(settings.ipv6)
         req.setTopN(settings.topN)
         req.setExportMode(settings.exportMode)
         req.setImportMode(settings.importMode)

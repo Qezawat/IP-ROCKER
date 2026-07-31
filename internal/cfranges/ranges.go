@@ -59,18 +59,6 @@ func loadDefaultBlocks() []Block {
 	return out
 }
 
-// V6Blocks is Cloudflare's IPv6 edge space. IPv6 reputation data is sparse, so
-// weights are neutral and based only on block size.
-var V6Blocks = []Block{
-	{CIDR: "2400:cb00::/32", Weight: 1.0},
-	{CIDR: "2606:4700::/32", Weight: 1.0},
-	{CIDR: "2803:f800::/32", Weight: 0.8},
-	{CIDR: "2405:b500::/32", Weight: 0.8},
-	{CIDR: "2405:8100::/32", Weight: 0.8},
-	{CIDR: "2a06:98c0::/29", Weight: 1.0},
-	{CIDR: "2c0f:f248::/32", Weight: 0.6},
-}
-
 // KnownDirtySubnets are /22-or-smaller ranges observed to be almost entirely
 // proxy/VPN/abuser flagged. Addresses inside them are skipped outright.
 var KnownDirtySubnets = []string{
@@ -90,7 +78,6 @@ type Source struct {
 // Options configures a Source.
 type Options struct {
 	IPv4 bool
-	IPv6 bool
 	// ExtraCIDRs are added to the pool with neutral weight.
 	ExtraCIDRs []string
 	// OnlyExtra treats ExtraCIDRs as the entire scan scope, ignoring the
@@ -136,13 +123,6 @@ func NewSource(opts Options) (*Source, error) {
 				}
 			}
 		}
-		if opts.IPv6 {
-			for _, b := range V6Blocks {
-				if err := add(b); err != nil {
-					return nil, err
-				}
-			}
-		}
 	}
 	for _, c := range opts.ExtraCIDRs {
 		c = strings.TrimSpace(c)
@@ -154,7 +134,7 @@ func NewSource(opts Options) (*Source, error) {
 		}
 	}
 	if len(s.nets) == 0 {
-		return nil, fmt.Errorf("no ranges selected (enable IPv4 and/or IPv6)")
+		return nil, fmt.Errorf("no ranges selected")
 	}
 
 	if opts.SkipDirty {

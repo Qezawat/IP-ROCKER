@@ -130,7 +130,6 @@ Best: 104.25.228.176:443 — score 71.3, 🟢 clean risk 5.7%, United States San
 | `-sni` / `-host` | rotating | TLS server name / HTTP Host header |
 | `-strict` | false | Accept only fully clean addresses |
 | `-no-reputation` | false | Run fully offline |
-| `-v6` | false | Scan IPv6 space |
 | `-cidr` / `-only-cidr` | | Extra ranges / restrict scope to them |
 | `-out` / `-json` | | Write `ip:port` lines / full report |
 

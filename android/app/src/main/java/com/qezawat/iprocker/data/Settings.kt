@@ -44,8 +44,6 @@ data class ScanSettings(
     val uploadTest: Boolean = false,
     val reputationCheck: Boolean = true,
     val strict: Boolean = false,
-    val ipv6: Boolean = false,
-
     val configLink: String = "",
     val sni: String = "",
     val host: String = "",
@@ -187,7 +185,6 @@ class SettingsRepository(private val context: Context) {
             uploadTest = p[Keys.UPLOAD_TEST] ?: d.uploadTest,
             reputationCheck = p[Keys.REPUTATION] ?: d.reputationCheck,
             strict = p[Keys.STRICT] ?: d.strict,
-            ipv6 = p[Keys.IPV6] ?: d.ipv6,
             configLink = p[Keys.CONFIG_LINK] ?: d.configLink,
             sni = p[Keys.SNI] ?: d.sni,
             host = p[Keys.HOST] ?: d.host,
@@ -219,7 +216,6 @@ class SettingsRepository(private val context: Context) {
             p[Keys.UPLOAD_TEST] = s.uploadTest
             p[Keys.REPUTATION] = s.reputationCheck
             p[Keys.STRICT] = s.strict
-            p[Keys.IPV6] = s.ipv6
             p[Keys.CONFIG_LINK] = s.configLink
             p[Keys.SNI] = s.sni
             p[Keys.HOST] = s.host
@@ -250,7 +246,6 @@ class SettingsRepository(private val context: Context) {
         val UPLOAD_TEST = booleanPreferencesKey("upload_test")
         val REPUTATION = booleanPreferencesKey("reputation")
         val STRICT = booleanPreferencesKey("strict")
-        val IPV6 = booleanPreferencesKey("ipv6")
         val CONFIG_LINK = stringPreferencesKey("config_link")
         val SNI = stringPreferencesKey("sni")
         val HOST = stringPreferencesKey("host")

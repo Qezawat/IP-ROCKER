@@ -44,7 +44,6 @@ func main() {
 		host        = flag.String("host", "", "HTTP Host header; empty uses the SNI")
 		strict      = flag.Bool("strict", false, "only accept addresses that are clean on every axis")
 		noRep       = flag.Bool("no-reputation", false, "skip reputation lookups and run fully offline")
-		v6          = flag.Bool("v6", false, "scan IPv6 space instead of IPv4")
 		extra       = flag.String("cidr", "", "comma-separated extra CIDRs to include")
 		only        = flag.Bool("only-cidr", false, "scan only the CIDRs given by -cidr")
 		top         = flag.Int("top", 20, "how many results to print")
@@ -119,8 +118,7 @@ func main() {
 		},
 		Criteria: crit,
 		Ranges: cfranges.Options{
-			IPv4:       !*v6,
-			IPv6:       *v6,
+			IPv4:       true,
 			ExtraCIDRs: extraCIDRs,
 			OnlyExtra:  *only,
 			SkipDirty:  true,

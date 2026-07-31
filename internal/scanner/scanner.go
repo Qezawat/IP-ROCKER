@@ -113,9 +113,8 @@ func (o Options) WithDefaults() Options {
 	if o.NeighborMax <= 0 {
 		o.NeighborMax = 300
 	}
-	if !o.Ranges.IPv4 && !o.Ranges.IPv6 {
-		o.Ranges.IPv4 = true
-	}
+	// Scans are IPv4-only; the IPv6 space is not supported.
+	o.Ranges.IPv4 = true
 	if o.Criteria.Weights == (score.Weights{}) {
 		o.Criteria = score.DefaultCriteria()
 	}

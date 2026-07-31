@@ -360,13 +360,6 @@ fun SettingsSheet(
                     checked = settings.strict,
                     onCheckedChange = { v -> onChange { it.copy(strict = v) } },
                 )
-                SettingToggle(
-                    title = "Scan IPv6",
-                    subtitle = "Probes Cloudflare's IPv6 space instead of IPv4. Only " +
-                        "useful if your network and config support IPv6.",
-                    checked = settings.ipv6,
-                    onCheckedChange = { v -> onChange { it.copy(ipv6 = v) } },
-                )
             }
 
             Spacer(Modifier.height(12.dp))

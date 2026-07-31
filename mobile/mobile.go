@@ -64,7 +64,6 @@ type ScanRequest struct {
 	requireWS      bool
 	strict         bool
 	skipReputation bool
-	ipv6           bool
 	extraCIDRs     string
 	onlyExtra      bool
 	topN           int32
@@ -122,7 +121,6 @@ func (r *ScanRequest) SetTopN(v int32)            { r.topN = v }
 func (r *ScanRequest) SetExportMode(v string)     { r.exportMode = v }
 func (r *ScanRequest) SetImportMode(v string)     { r.importMode = v }
 func (r *ScanRequest) SetSkipReputation(v bool)   { r.skipReputation = v }
-func (r *ScanRequest) SetIPv6(v bool)             { r.ipv6 = v }
 func (r *ScanRequest) SetExtraCIDRs(v string)     { r.extraCIDRs = v }
 func (r *ScanRequest) SetOnlyExtra(v bool)        { r.onlyExtra = v }
 
@@ -315,8 +313,7 @@ func (r *ScanRequest) toOptions(listener ProgressListener) (scanner.Options, err
 		},
 		Criteria: crit,
 		Ranges: cfranges.Options{
-			IPv4:       !r.ipv6,
-			IPv6:       r.ipv6,
+			IPv4:       true,
 			ExtraCIDRs: extra,
 			OnlyExtra:  r.onlyExtra,
 			SkipDirty:  true,
