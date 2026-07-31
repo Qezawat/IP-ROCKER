@@ -1,14 +1,20 @@
-// Package cfranges holds Cloudflare's published edge ranges together with
-// empirically measured "cleanliness" weights.
+// Package cfranges holds Cloudflare's published edge ranges, used as the default
+// scan scope when the user has not supplied their own CIDRs.
 //
-// Weights come from sampling the reputation of random addresses inside each
-// block (see cmd/blockprofile). Blocks whose addresses are frequently flagged
-// as proxy/VPN/abuser by reputation providers get a low weight so the scanner
-// spends its probe budget where clean IPs actually live, instead of drawing
-// uniformly at random like naive scanners do.
+// The list (cf_ranges.txt) is the full set of Cloudflare IPv4 edge /24 blocks as
+// published on the date noted in that file. It is intentionally exhaustive
+// rather than weighted: on a long path (Iran -> Frankfurt, etc.) the reachable
+// edges live in blocks our earlier hand-picked "cleanest" weights would have
+// under-sampled, so we now draw uniformly across the whole space and let the
+// probe + reputation stages do the filtering. Every block is eligible; weights
+// only bias the draw, they never discard.
+//
+// To use a custom scope, pass ExtraCIDRs (Settings -> Custom Ranges / file
+// import) or flip OnlyExtra to ignore the built-in list entirely.
 package cfranges
 
 import (
+	_ "embed"
 	"encoding/binary"
 	"fmt"
 	"math/rand"
@@ -17,47 +23,40 @@ import (
 	"strings"
 )
 
+//go:embed cf_ranges.txt
+var defaultRanges string
+
 // Block is one Cloudflare CIDR plus its scan priority.
 type Block struct {
 	CIDR string
-	// Weight biases random selection. 1.0 = neutral. Higher means the block
-	// historically yields cleaner IPs; lower means it is polluted.
+	// Weight biases random selection. 1.0 = neutral. Higher means the block is
+	// drawn more often. Weights never exclude a block.
 	Weight float64
 	// Note documents why the weight is what it is.
 	Note string
 }
 
-// V4Blocks is Cloudflare's IPv4 edge space, ordered roughly best-first.
-//
-// Measured abuser/proxy/vpn flag rates over a 300-address sample:
-//
-//	162.158.0.0/15    0% / 0% / 0%    cleanest
-//	172.64.0.0/13     0% / 0% / 0%
-//	104.24.0.0/14     0% / 0% / 0%
-//	104.16.0.0/13     0% / 8% / 0%
-//	198.41.128.0/17   0% / 4% / 8%
-//	173.245.48.0/20   0% / 8% / 4%
-//	188.114.96.0/20   0% / 0% / partly 100% vpn (96.0/22 sub-block)
-//	190.93.240.0/20   0% / 4% / 100% vpn
-//	131.0.72.0/22     0% / 0% / 100% vpn
-//	108.162.192.0/18  4% / 4% / 4%
-//	103.21.244.0/22  80% /100% /100%  heavily polluted
-var V4Blocks = []Block{
-	{CIDR: "162.158.0.0/15", Weight: 1.6, Note: "clean, large, well distributed"},
-	{CIDR: "172.64.0.0/13", Weight: 1.6, Note: "clean, large"},
-	{CIDR: "104.24.0.0/14", Weight: 1.5, Note: "clean"},
-	{CIDR: "104.16.0.0/13", Weight: 1.2, Note: "mostly clean, some proxy-flagged /24s"},
-	{CIDR: "198.41.128.0/17", Weight: 1.0, Note: "mixed"},
-	{CIDR: "173.245.48.0/20", Weight: 0.9, Note: "small, some proxy flags"},
-	{CIDR: "141.101.64.0/18", Weight: 0.9, Note: "mixed; 141.101.120.0/22 is proxy-flagged"},
-	{CIDR: "188.114.96.0/20", Weight: 0.7, Note: "188.114.96.0/22 flagged as VPN"},
-	{CIDR: "103.22.200.0/22", Weight: 0.6, Note: "small APNIC block"},
-	{CIDR: "103.31.4.0/22", Weight: 0.6, Note: "small APNIC block"},
-	{CIDR: "197.234.240.0/22", Weight: 0.5, Note: "small AFRINIC block, far colos"},
-	{CIDR: "190.93.240.0/20", Weight: 0.4, Note: "widely flagged as VPN"},
-	{CIDR: "131.0.72.0/22", Weight: 0.4, Note: "widely flagged as VPN"},
-	{CIDR: "108.162.192.0/18", Weight: 0.4, Note: "abuser flags present"},
-	{CIDR: "103.21.244.0/22", Weight: 0.1, Note: "heavily polluted: 80% abuser, 100% proxy"},
+// V4Blocks is the default Cloudflare IPv4 edge space, loaded from cf_ranges.txt.
+// It is exposed (and named) for callers that want to inspect the built-in set.
+var V4Blocks = loadDefaultBlocks()
+
+func loadDefaultBlocks() []Block {
+	out := make([]Block, 0, 5000)
+	for _, line := range strings.Split(defaultRanges, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if _, _, err := net.ParseCIDR(line); err != nil {
+			continue
+		}
+		out = append(out, Block{CIDR: line, Weight: 1.0})
+	}
+	if len(out) == 0 {
+		// Fallback so the package is never empty even if the embed is missing.
+		out = []Block{{CIDR: "104.16.0.0/12", Weight: 1.0}}
+	}
+	return out
 }
 
 // V6Blocks is Cloudflare's IPv6 edge space. IPv6 reputation data is sparse, so
@@ -120,7 +119,7 @@ func NewSource(opts Options) (*Source, error) {
 		if w <= 0 {
 			w = 1
 		}
-		// Scale weight by block size so a /13 is not drawn as often as a /22
+		// Scale weight by block size so a /12 is not drawn as often as a /24
 		// purely because both have weight 1.
 		ones, bits := n.Mask.Size()
 		size := pow2(bits - ones)
@@ -266,9 +265,6 @@ func (s *Source) NeighborsOf(ip net.IP, radius, limit int) []net.IP {
 				continue
 			}
 			out = append(out, cand)
-			if len(out) >= limit {
-				break
-			}
 		}
 	}
 	return out

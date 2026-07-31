@@ -5,6 +5,7 @@ package scanner
 import (
 	"context"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -70,6 +71,16 @@ type Options struct {
 
 	// SkipReputation runs the hunt fully offline.
 	SkipReputation bool
+
+	// TopN, when > 0, caps how many candidates are kept for the report and
+	// export. It mirrors the TUI's "Phase 2 picks" — the scan still probes
+	// Count addresses, but only the best TopN are surfaced.
+	TopN int
+
+	// ExportMode selects what the textual export contains. "working" keeps only
+	// addresses that passed every check (the Phase 2 output); "phase1" keeps all
+	// candidates that answered. The mobile UI exposes both as copy buttons.
+	ExportMode string
 
 	// Report receives progress updates. It is called from worker goroutines,
 	// so implementations must be safe for concurrent use.
@@ -142,6 +153,25 @@ func (r *Report) Clean() []*score.Candidate {
 		}
 	}
 	return out
+}
+
+// ExportText renders candidates as one endpoint per line. mode selects what is
+// included: "working" keeps only the addresses that passed every check (the
+// Phase 2 output), anything else keeps every candidate that answered (Phase 1).
+// limit, when > 0, caps the number of lines to the highest-scoring candidates.
+func (r *Report) ExportText(mode string, limit int) string {
+	cands := r.Candidates
+	if mode == "working" {
+		cands = r.Clean()
+	}
+	if limit > 0 && len(cands) > limit {
+		cands = cands[:limit]
+	}
+	lines := make([]string, 0, len(cands))
+	for _, c := range cands {
+		lines = append(lines, c.Endpoint)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // Scanner runs hunts.
@@ -276,6 +306,12 @@ func (s *Scanner) Run(ctx context.Context) (*Report, error) {
 		cands = append(cands, score.Evaluate(r, repMap[r.IP.String()], s.opts.Criteria))
 	}
 	score.Rank(cands)
+
+	// TopN mirrors the TUI "Phase 2 picks": the scan still probes Count
+	// addresses, but only the best TopN are kept for the report and export.
+	if s.opts.TopN > 0 && len(cands) > s.opts.TopN {
+		cands = cands[:s.opts.TopN]
+	}
 
 	s.report(Progress{Phase: PhaseDone, Tested: s.tested.Load(), Hits: s.hits.Load()})
 

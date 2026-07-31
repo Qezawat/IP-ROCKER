@@ -195,6 +195,7 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
     fun setFilter(f: ResultFilter) = _state.update { it.copy(filter = f) }
 
     fun consumeMessage() = _state.update { it.copy(message = null) }
+    fun updateMessage(text: String) = _state.update { it.copy(message = text) }
 
     fun consumeConfigApplied() = _state.update { it.copy(configApplied = null) }
 
@@ -227,13 +228,25 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         it.copy(details = null, detailsError = null, detailsLoading = false)
     }
 
-    /** The clean endpoints as text, for copying to the clipboard. */
-    fun exportText(): String {
-        val report = _state.value.report
-        val list = report?.clean ?: _state.value.liveHits.filter { it.healthy }
+    /**
+     * The endpoints as text for copying or saving. mode selects the content:
+     * "working" keeps only addresses that passed every check (Phase 2), "phase1"
+     * keeps every address that answered. The export respects the Top N setting by
+     * taking the highest-scoring candidates first.
+     */
+    fun exportText(mode: String = _state.value.settings.exportMode): String {
+        val report = _state.value.report ?: run {
+            val live = _state.value.liveHits.filter { if (mode == "working") it.healthy else true }
+            if (live.isEmpty()) return ""
+            return live.sortedByDescending { it.score }.joinToString("\n") { it.endpoint }
+        }
+        val list = if (mode == "working") report.clean else report.candidates
         if (list.isEmpty()) return ""
         return list.joinToString("\n") { it.endpoint }
     }
+
+    /** Phase 2 output: only the working addresses, saved as working_ips.txt. */
+    fun exportWorkingText(): String = exportText("working")
 
     override fun onCleared() {
         bridge.stop()

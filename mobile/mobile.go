@@ -13,6 +13,7 @@ package mobile
 
 import (
 	"context"
+	"net"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -66,6 +67,9 @@ type ScanRequest struct {
 	ipv6           bool
 	extraCIDRs     string
 	onlyExtra      bool
+	topN           int32
+	exportMode     string
+	importMode     string // "comma" or "lines"
 }
 
 // NewScanRequest returns a request preloaded with defaults tuned for a phone on
@@ -114,6 +118,9 @@ func (r *ScanRequest) SetMinSpeedKBps(v float64) { r.minSpeedKBps = v }
 
 func (r *ScanRequest) SetRequireWebSocket(v bool) { r.requireWS = v }
 func (r *ScanRequest) SetStrict(v bool)           { r.strict = v }
+func (r *ScanRequest) SetTopN(v int32)            { r.topN = v }
+func (r *ScanRequest) SetExportMode(v string)     { r.exportMode = v }
+func (r *ScanRequest) SetImportMode(v string)     { r.importMode = v }
 func (r *ScanRequest) SetSkipReputation(v bool)   { r.skipReputation = v }
 func (r *ScanRequest) SetIPv6(v bool)             { r.ipv6 = v }
 func (r *ScanRequest) SetExtraCIDRs(v string)     { r.extraCIDRs = v }
@@ -269,10 +276,24 @@ func (r *ScanRequest) toOptions(listener ProgressListener) (scanner.Options, err
 	}
 
 	var extra []string
-	for _, c := range strings.Split(r.extraCIDRs, ",") {
-		if c = strings.TrimSpace(c); c != "" {
-			extra = append(extra, c)
+	// Import mode selects how the custom ranges text is split. "lines" accepts a
+	// file pasted line-by-line (one CIDR or IP per line), which is what most
+	// exported lists actually look like; "comma" keeps the old single-line
+	// comma-separated form. Blank lines and comments are ignored either way.
+	raw := r.extraCIDRs
+	if r.importMode == "lines" {
+		raw = strings.ReplaceAll(raw, "\n", ",")
+	}
+	for _, c := range strings.Split(raw, ",") {
+		c = strings.TrimSpace(c)
+		if c == "" || strings.HasPrefix(c, "#") {
+			continue
 		}
+		// A bare IP is treated as a /32 so a pasted ip list still scans.
+		if net.ParseIP(c) != nil {
+			c += "/32"
+		}
+		extra = append(extra, c)
 	}
 
 	opts := scanner.Options{
@@ -301,6 +322,8 @@ func (r *ScanRequest) toOptions(listener ProgressListener) (scanner.Options, err
 			SkipDirty:  true,
 		},
 		SkipReputation: r.skipReputation,
+		TopN:           int(r.topN),
+		ExportMode:     r.exportMode,
 	}
 
 	if listener != nil {

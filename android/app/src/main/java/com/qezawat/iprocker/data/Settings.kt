@@ -54,6 +54,27 @@ data class ScanSettings(
 
     val customRanges: String = "",
     val onlyCustomRanges: Boolean = false,
+
+    /**
+     * How many of the best candidates to keep for the report and export, mirroring
+     * the TUI's "Phase 2 picks". The scan still probes [count] addresses; this
+     * only caps what is surfaced. 0 means keep everything.
+     */
+    val topN: Int = 0,
+
+    /**
+     * What the export / copy buttons produce. "working" = only addresses that
+     * passed every check (the Phase 2 output, saved as working_ips.txt); "phase1"
+     * = every address that answered.
+     */
+    val exportMode: String = "working",
+
+    /**
+     * How custom ranges / IP text is split. "lines" accepts a file pasted
+     * line-by-line (one CIDR or IP per line), which is what exported lists look
+     * like; "comma" keeps the single-line comma form.
+     */
+    val importMode: String = "lines",
 ) {
     companion object {
         /** Ports Cloudflare terminates TLS on for a proxied hostname. */
@@ -92,6 +113,15 @@ data class ScanSettings(
 
         /** Upload-sample presets in bytes. */
         val PRESET_UPLOAD_BYTES = listOf(128L * 1024, 512L * 1024, 1024L * 1024, 2048L * 1024)
+
+        /** Phase 2 pick presets; "all" keeps every candidate. */
+        val PRESET_TOPN = listOf(0, 10, 25, 50, 100)
+
+        /** How the export splits into Phase 1 (all answers) vs Phase 2 (working). */
+        val EXPORT_MODES = listOf("working", "phase1")
+
+        /** Custom-range import styles. */
+        val IMPORT_MODES = listOf("lines", "comma")
     }
 
     /**
@@ -165,6 +195,9 @@ class SettingsRepository(private val context: Context) {
             requireWebSocket = p[Keys.REQUIRE_WS] ?: d.requireWebSocket,
             customRanges = p[Keys.CUSTOM_RANGES] ?: d.customRanges,
             onlyCustomRanges = p[Keys.ONLY_CUSTOM] ?: d.onlyCustomRanges,
+            topN = p[Keys.TOP_N] ?: d.topN,
+            exportMode = p[Keys.EXPORT_MODE] ?: d.exportMode,
+            importMode = p[Keys.IMPORT_MODE] ?: d.importMode,
         )
     }
 
@@ -194,6 +227,9 @@ class SettingsRepository(private val context: Context) {
             p[Keys.REQUIRE_WS] = s.requireWebSocket
             p[Keys.CUSTOM_RANGES] = s.customRanges
             p[Keys.ONLY_CUSTOM] = s.onlyCustomRanges
+            p[Keys.TOP_N] = s.topN
+            p[Keys.EXPORT_MODE] = s.exportMode
+            p[Keys.IMPORT_MODE] = s.importMode
         }
     }
 
@@ -222,5 +258,8 @@ class SettingsRepository(private val context: Context) {
         val REQUIRE_WS = booleanPreferencesKey("require_ws")
         val CUSTOM_RANGES = stringPreferencesKey("custom_ranges")
         val ONLY_CUSTOM = booleanPreferencesKey("only_custom")
+        val TOP_N = intPreferencesKey("top_n")
+        val EXPORT_MODE = stringPreferencesKey("export_mode")
+        val IMPORT_MODE = stringPreferencesKey("import_mode")
     }
 }

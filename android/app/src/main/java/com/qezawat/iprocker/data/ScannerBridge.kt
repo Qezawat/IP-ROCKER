@@ -74,6 +74,9 @@ class ScannerBridge {
         req.setStrict(settings.strict)
         req.setSkipReputation(!settings.reputationCheck)
         req.setIPv6(settings.ipv6)
+        req.setTopN(settings.topN)
+        req.setExportMode(settings.exportMode)
+        req.setImportMode(settings.importMode)
         req.setOnlyExtra(settings.onlyCustomRanges)
         req.setExtraCIDRs(settings.customRanges)
 

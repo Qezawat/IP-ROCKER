@@ -9,6 +9,7 @@ package score
 
 import (
 	"math"
+	"strconv"
 	"sort"
 	"time"
 
@@ -78,6 +79,9 @@ type Candidate struct {
 	Verdict string `json:"verdict"`
 	// Notes explains the outcome to the user.
 	Notes []string `json:"notes,omitempty"`
+
+	// Endpoint is the address:port form used in exports and configs.
+	Endpoint string `json:"endpoint"`
 }
 
 // Criteria defines what counts as a usable address.
@@ -136,6 +140,7 @@ func Evaluate(r *probe.Result, rep *reputation.Info, c Criteria) *Candidate {
 		Reputation: rep,
 		Verdict:    reputation.VerdictUnknown.String(),
 	}
+	cand.Endpoint = cand.IP + ":" + strconv.Itoa(cand.Port)
 	if rep != nil {
 		cand.Verdict = rep.Verdict.String()
 	}

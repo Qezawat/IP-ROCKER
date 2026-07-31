@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
@@ -130,10 +132,24 @@ fun ScanScreen(viewModel: ScanViewModel = viewModel()) {
                     state = state,
                     onStart = viewModel::startScan,
                     onStop = viewModel::stopScan,
-                    onCopyAll = {
-                        val text = viewModel.exportText()
+                    onCopyPhase1 = {
+                        val text = viewModel.exportText("phase1")
                         if (text.isEmpty()) return@ControlCard
                         copyToClipboard(context, text)
+                    },
+                    onCopyWorking = {
+                        val text = viewModel.exportWorkingText()
+                        if (text.isEmpty()) return@ControlCard
+                        copyToClipboard(context, text)
+                    },
+                    onSaveWorking = {
+                        val text = viewModel.exportWorkingText()
+                        if (text.isEmpty()) return@ControlCard
+                        val uri = saveTextFile(context, "working_ips.txt", text)
+                        if (uri != null) {
+                            viewModel.consumeMessage()
+                            viewModel.updateMessage("Saved working_ips.txt")
+                        }
                     },
                 )
             }
@@ -193,7 +209,9 @@ private fun ControlCard(
     state: UiState,
     onStart: () -> Unit,
     onStop: () -> Unit,
-    onCopyAll: () -> Unit,
+    onCopyPhase1: () -> Unit,
+    onCopyWorking: () -> Unit,
+    onSaveWorking: () -> Unit,
 ) {
     RockerCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -212,12 +230,28 @@ private fun ControlCard(
                 )
             }
 
+            // Phase 1 copies every address that answered; Phase 2 copies only the
+            // working ones and also offers to save them as working_ips.txt.
+            if (state.report != null && state.report.candidates.isNotEmpty()) {
+                IconButton(
+                    onClick = onCopyPhase1,
+                    modifier = Modifier.semantics { contentDescription = "Copy all answered endpoints" },
+                ) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = null, tint = TextSecondary)
+                }
+            }
             if (state.report?.cleanCount?.let { it > 0 } == true) {
                 IconButton(
-                    onClick = onCopyAll,
-                    modifier = Modifier.semantics { contentDescription = "Copy all usable endpoints" },
+                    onClick = onCopyWorking,
+                    modifier = Modifier.semantics { contentDescription = "Copy working endpoints" },
                 ) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = null, tint = RockerAccent)
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = RockerAccent)
+                }
+                IconButton(
+                    onClick = onSaveWorking,
+                    modifier = Modifier.semantics { contentDescription = "Save working_ips.txt" },
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null, tint = RockerAccent)
                 }
             }
         }
@@ -329,4 +363,24 @@ private fun EmptyState(neverRun: Boolean) {
 private fun copyToClipboard(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     cm.setPrimaryClip(ClipData.newPlainText("IP ROCKER", text))
+}
+
+/**
+ * Writes text to a user-picked file via the storage access framework and returns
+ * the resulting URI. Returns null if the user cancels the picker. Using SAF
+ * (rather than a fixed path) avoids the scoped-storage restrictions on newer
+ * Android and lets the user save working_ips.txt wherever they like.
+ */
+private fun saveTextFile(context: Context, fileName: String, text: String): android.net.Uri? {
+    val resolver = context.contentResolver
+    val values = android.content.ContentValues().apply {
+        put(android.provider.MediaStore.Downloads.DISPLAY_NAME, fileName)
+        put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain")
+    }
+    val collection = android.provider.MediaStore.Downloads.getContentUri("external")
+    val uri = resolver.insert(collection, values) ?: return null
+    resolver.openOutputStream(uri)?.use { out ->
+        out.write(text.toByteArray(Charsets.UTF_8))
+    }
+    return uri
 }

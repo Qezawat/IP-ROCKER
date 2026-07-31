@@ -372,6 +372,65 @@ fun SettingsSheet(
             Spacer(Modifier.height(12.dp))
 
             RockerCard {
+                SectionLabel("Phase 2 (export)")
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Top picks to keep",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                ChoiceChips(
+                    options = ScanSettings.PRESET_TOPN.map { if (it == 0) "All" else it.toString() },
+                    selected = { (settings.topN == 0 && it == "All") || settings.topN.toString() == it },
+                    label = { it },
+                    onSelect = { label ->
+                        val v = if (label == "All") 0 else label.toIntOrNull() ?: 0
+                        onChange { it.copy(topN = v) }
+                    },
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Export content",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "Phase 1 = every address that answered. Phase 2 (working) = only " +
+                        "addresses that passed every check, saved as working_ips.txt.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                )
+                Spacer(Modifier.height(6.dp))
+                ChoiceChips(
+                    options = ScanSettings.EXPORT_MODES,
+                    selected = { it == settings.exportMode },
+                    label = { it },
+                    onSelect = { m -> onChange { it.copy(exportMode = m) } },
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Custom range import",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    "Lines splits one CIDR or IP per line (a pasted file). Comma keeps the " +
+                        "single-line comma form.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                )
+                Spacer(Modifier.height(6.dp))
+                ChoiceChips(
+                    options = ScanSettings.IMPORT_MODES,
+                    selected = { it == settings.importMode },
+                    label = { it },
+                    onSelect = { m -> onChange { it.copy(importMode = m) } },
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            RockerCard {
                 SectionLabel("Timing")
                 Spacer(Modifier.height(8.dp))
                 Text(
