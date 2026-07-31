@@ -3,6 +3,11 @@ package com.qezawat.iprocker.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -74,6 +79,35 @@ fun ScanScreen(viewModel: ScanViewModel = viewModel()) {
 
     var showSettings by remember { mutableStateOf(false) }
 
+    // Picks a text file (ips.txt / cidr.txt) and loads its contents into the
+    // custom ranges, switching import to line-by-line so every line is one
+    // CIDR or IP. The file is read here and handed to the ViewModel as text.
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+        onResult = { uri: Uri? ->
+            uri ?: return@rememberLauncherForActivityResult
+            val text = context.contentResolver.openInputStream(uri)?.use { stream ->
+                stream.bufferedReader().readText()
+            } ?: return@rememberLauncherForActivityResult
+            viewModel.setCustomRanges(text)
+        },
+    )
+
+    // Lets the user pick where to save the Phase 2 working list, mirroring the
+    // TUI's export step rather than silently dumping into Downloads.
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/plain"),
+        onResult = { uri: Uri? ->
+            uri ?: return@rememberLauncherForActivityResult
+            val text = viewModel.exportWorkingText()
+            if (text.isEmpty()) return@rememberLauncherForActivityResult
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                out.write(text.toByteArray(Charsets.UTF_8))
+            }
+            viewModel.updateMessage("Exported working_ips.txt")
+        },
+    )
+
     // Messages are surfaced once and cleared, so a stale error never lingers.
     LaunchedEffect(state.message) {
         state.message?.let {
@@ -143,13 +177,10 @@ fun ScanScreen(viewModel: ScanViewModel = viewModel()) {
                         copyToClipboard(context, text)
                     },
                     onSaveWorking = {
-                        val text = viewModel.exportWorkingText()
-                        if (text.isEmpty()) return@ControlCard
-                        val uri = saveTextFile(context, "working_ips.txt", text)
-                        if (uri != null) {
-                            viewModel.consumeMessage()
-                            viewModel.updateMessage("Saved working_ips.txt")
-                        }
+                        // Open a file picker so the user chooses where to save,
+                        // like the TUI export step, instead of a fixed Downloads path.
+                        if (viewModel.exportWorkingText().isEmpty()) return@ControlCard
+                        exportLauncher.launch("working_ips.txt")
                     },
                 )
             }
@@ -190,6 +221,7 @@ fun ScanScreen(viewModel: ScanViewModel = viewModel()) {
         SettingsSheet(
             settings = state.settings,
             onChange = viewModel::updateSettings,
+            onImportFile = { importLauncher.launch("*/*") },
             onDismiss = { showSettings = false },
         )
     }

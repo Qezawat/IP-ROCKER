@@ -144,6 +144,12 @@ class ScanViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { settingsRepo.save(next) }
     }
 
+    /** Replaces the custom ranges text (from a pasted file) and switches the
+     * import mode to line-by-line so each line is treated as one CIDR or IP. */
+    fun setCustomRanges(text: String) {
+        updateSettings { it.copy(customRanges = text, importMode = "lines") }
+    }
+
     fun startScan() {
         if (_state.value.scanning) return
 

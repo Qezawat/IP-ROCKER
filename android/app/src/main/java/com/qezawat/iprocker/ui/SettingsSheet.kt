@@ -27,8 +27,15 @@ import com.qezawat.iprocker.ui.components.RockerCard
 import com.qezawat.iprocker.ui.components.SectionLabel
 import com.qezawat.iprocker.ui.theme.RockerAccent
 import com.qezawat.iprocker.ui.theme.RockerBackground
+import com.qezawat.iprocker.ui.theme.RockerSurfaceHigh
 import com.qezawat.iprocker.ui.theme.TextSecondary
 import com.qezawat.iprocker.ui.theme.VerdictCaution
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 
 /**
  * Explains what a given timeout will do, because the useful range spans an
@@ -130,6 +137,7 @@ private fun minSpeedAdvice(kbps: Double): String = when {
 fun SettingsSheet(
     settings: ScanSettings,
     onChange: ((ScanSettings) -> ScanSettings) -> Unit,
+    onImportFile: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -480,6 +488,17 @@ fun SettingsSheet(
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary,
                 )
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = onImportFile,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = RockerSurfaceHigh),
+                ) {
+                    Icon(Icons.Default.FileOpen, contentDescription = null, tint = RockerAccent)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Import file (ips.txt / cidr.txt)", color = RockerAccent)
+                }
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(
                     value = settings.customRanges,
