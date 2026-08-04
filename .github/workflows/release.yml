@@ -152,7 +152,16 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleRelease --stacktrace
 
+      - name: Bundle release AAB
+        working-directory: android
+        env:
+          ORG_GRADLE_PROJECT_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ORG_GRADLE_PROJECT_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :app:bundleRelease --stacktrace
+
       - name: Rename APKs
+
         run: |
           mkdir -p release-artifacts
           V="${{ steps.v.outputs.version }}"
@@ -166,7 +175,8 @@ jobs:
             [ "$abi" = "$name" ] && abi="universal"
             cp "$apk" "release-artifacts/IP-ROCKER-${V}-${abi}${SUFFIX}.apk"
           done
-          (cd release-artifacts && sha256sum *.apk > SHA256SUMS.txt)
+          cp android/app/build/outputs/bundle/release/*.aab release-artifacts/ 2>/dev/null || true
+          (cd release-artifacts && sha256sum *.apk > SHA256SUMS.txt; sha256sum *.aab >> SHA256SUMS.txt 2>/dev/null || true)
           ls -lh release-artifacts
 
       - uses: actions/upload-artifact@v4
