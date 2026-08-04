@@ -277,6 +277,16 @@ func pinnedTransport(ip net.IP, port int, sni string, insecure bool, timeout tim
 	}
 }
 
+// isHTTPPort reports whether the port is one Cloudflare serves plain HTTP on.
+// Probing these with https would fail every time, so the scheme must match.
+func isHTTPPort(p int) bool {
+	switch p {
+	case 80, 8080, 8880, 2052, 2082, 2086, 2095:
+		return true
+	}
+	return false
+}
+
 func probeHTTP(ctx context.Context, ip net.IP, sni string, cfg Config) Attempt {
 	host := cfg.Host
 	if host == "" {
@@ -294,7 +304,7 @@ func probeHTTP(ctx context.Context, ip net.IP, sni string, cfg Config) Attempt {
 	}
 
 	scheme := "https"
-	if cfg.Port == 80 || cfg.Port == 8080 {
+	if isHTTPPort(cfg.Port) {
 		scheme = "http"
 	}
 	traceURL := fmt.Sprintf("%s://%s%s", scheme, host, cfg.TracePath)
