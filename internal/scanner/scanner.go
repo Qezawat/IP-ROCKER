@@ -295,8 +295,18 @@ func (s *Scanner) Run(ctx context.Context) (*Report, error) {
 		m, err := s.rep.LookupBulk(ctx, toRate)
 		repMap = m
 		if err != nil {
-			repErrText = err.Error()
-			s.report(Progress{Phase: PhaseReputation, Message: "reputation lookup problem: " + err.Error()})
+			// A partial failure (one 429'd chunk) should not mark the whole
+			// report as unverified when most addresses rated fine.
+			ok := 0
+			for _, r := range snapshot {
+				if info := repMap[r.IP.String()]; info != nil && info.Err == "" {
+					ok++
+				}
+			}
+			if ok == 0 {
+				repErrText = err.Error()
+				s.report(Progress{Phase: PhaseReputation, Message: "reputation lookup problem: " + err.Error()})
+			}
 		}
 	}
 
