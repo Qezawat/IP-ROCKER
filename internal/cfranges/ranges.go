@@ -193,13 +193,19 @@ func (s *Source) Stream(done <-chan struct{}, count int) <-chan net.IP {
 	ch := make(chan net.IP, 128)
 	go func() {
 		defer close(ch)
-		seen := make(map[string]struct{}, max(count, 64))
+		seenCap := max(count, 64)
+		seen := make(map[string]struct{}, seenCap)
 		sent := 0
 		// Cap wasted draws so a tiny custom CIDR cannot spin forever.
 		misses := 0
 		for count <= 0 || sent < count {
 			ip := s.Random()
 			key := ip.String()
+			// An unbounded scan (count<=0) would grow seen forever; roll it
+			// over once it gets large so memory stays flat.
+			if len(seen) > 100000 {
+				seen = make(map[string]struct{}, seenCap)
+			}
 			if _, dup := seen[key]; dup {
 				misses++
 				if misses > 10000 {
