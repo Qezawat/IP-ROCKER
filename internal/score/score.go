@@ -105,7 +105,7 @@ type Criteria struct {
 // DefaultCriteria is a balanced profile: proven-carrying, clean-or-caution.
 func DefaultCriteria() Criteria {
 	return Criteria{
-		RequireHold:      true,
+		RequireHold:      false,
 		RequireWebSocket: false,
 		RequireClean:     false,
 		MaxLossPercent:   50,
@@ -116,6 +116,7 @@ func DefaultCriteria() Criteria {
 // StrictCriteria only accepts addresses that are green on every axis.
 func StrictCriteria() Criteria {
 	c := DefaultCriteria()
+	c.RequireHold = true
 	c.RequireClean = true
 	c.RequireWebSocket = true
 	c.MinDownloadKBps = 200
