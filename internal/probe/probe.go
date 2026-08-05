@@ -354,13 +354,15 @@ func probeHTTP(ctx context.Context, ip net.IP, sni string, cfg Config) Attempt {
 	att.HTTPOk = true
 
 	// Idle hold: keep a fresh connection open with no traffic. Filtering that
-	// permits the first request but resets the session shows up here.
+	// permits the first request but resets the session shows up here. A failed
+	// hold is recorded but never fatal: mobile carriers routinely reset idle
+	// TCP sessions through their NAT within a few seconds, which says nothing
+	// about whether this edge can carry traffic. Poisoning the whole attempt
+	// (and skipping the download measurement) on such a reset rejected good
+	// edges for no reason. RequireHard still disqualifies failing edges when
+	// the user opts in via strict mode.
 	if cfg.HoldDuration > 0 {
 		att.HeldOpen = holdCheck(ctx, ip, sni, cfg)
-		if !att.HeldOpen {
-			att.Err = "connection was reset during idle hold"
-			return att
-		}
 	}
 
 	if cfg.DownloadBytes > 0 {
