@@ -126,6 +126,13 @@ func (c Config) WithDefaults() Config {
 	if c.TracePath == "" {
 		c.TracePath = "/cdn-cgi/trace"
 	}
+	// Custom fronts present a certificate for a name that does not match the
+	// SNI we send, so strict verification rejects working edges. Skip it when
+	// the caller pins its own SNI or Host; the default rotating Cloudflare SNI
+	// keeps verification on.
+	if c.SNI != "" || c.Host != "" {
+		c.InsecureSkipVerify = true
+	}
 	return c
 }
 
